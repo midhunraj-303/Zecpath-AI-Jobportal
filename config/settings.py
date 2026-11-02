@@ -42,7 +42,7 @@ INSTALLED_APPS = [
     'rest_framework',
 
     # Project apps
-    'apps.accounts',
+    'apps.accounts.apps.AccountsConfig',
     'apps.employers',
     'apps.candidates',
     'apps.jobs',
