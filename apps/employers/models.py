@@ -17,4 +17,33 @@ class Employer(models.Model):
         related_name="employer_profile"
     )
 
+    # Company Information
+
+    company_name = models.CharField(
+        max_length=200
+    )
+
+    company_description = models.TextField(
+        blank=True
+    )
+
+    website = models.URLField(
+        blank=True
+    )
+
+    location = models.CharField(
+        max_length=200
+    )
+
+    # Timestamps
+    created_at = models.DateTimeField(
+        auto_now_add=True
+    )
+
+    updated_at = models.DateTimeField(
+        auto_now=True
+    )
+
+    def __str__(self):
+        return self.company_name
      
