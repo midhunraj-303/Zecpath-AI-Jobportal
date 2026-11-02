@@ -9,7 +9,7 @@ class CustomUserManager(UserManager):
         extra_fields.setdefault('role','ADMIN')
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
-        extra_fields.setdefault('is_varified', True)
+        extra_fields.setdefault('is_verified', True)
         
         return super().create_superuser(
             username, 
