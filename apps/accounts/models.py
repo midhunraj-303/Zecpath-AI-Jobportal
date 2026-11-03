@@ -10,6 +10,7 @@ class CustomUserManager(UserManager):
         extra_fields.setdefault('is_staff', True)
         extra_fields.setdefault('is_superuser', True)
         extra_fields.setdefault('is_verified', True)
+        extra_fields.setdefault('is_active',True)
         
         return super().create_superuser(
             username, 
@@ -48,6 +49,7 @@ class User(AbstractUser):
 
     # Account Verification
     is_verified = models.BooleanField(default=False)
+    is_active = models.BooleanField(default=False)
 
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)

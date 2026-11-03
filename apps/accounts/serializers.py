@@ -1,6 +1,8 @@
 from rest_framework import serializers
 from .models import User
-
+from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework_simplejwt.exceptions import TokenError
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from django.contrib.auth.password_validation import validate_password
 
 
@@ -72,3 +74,35 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
 
         return user
 
+class LogoutSerializer(serializers.Serializer):
+
+    refresh = serializers.CharField()
+
+    def validate_refresh(self, value):
+
+        try:
+            token = RefreshToken(value)
+
+            # Check whether the token is already blacklisted
+            if BlacklistedToken.objects.filter(
+                token__jti=token['jti']
+            ).exists():
+
+                raise serializers.ValidationError(
+                    "This refresh token has already been blacklisted."
+                )
+
+        except TokenError:
+            raise serializers.ValidationError(
+                "Invalid or expired refresh token."
+            )
+
+        return value
+
+    def save(self, **kwargs):
+
+        token = RefreshToken(
+            self.validated_data['refresh']
+        )
+
+        token.blacklist()

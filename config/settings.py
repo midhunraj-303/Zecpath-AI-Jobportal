@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'rest_framework_simplejwt',
+    'rest_framework_simplejwt.token_blacklist',
+    
 
     # Project apps
     'apps.accounts.apps.AccountsConfig',
@@ -160,5 +162,17 @@ SIMPLE_JWT = {
     # Custom user model primary key
     'USER_ID_FIELD': 'user_id',
     'USER_ID_CLAIM': 'user_id',
+
+    # Security settings
+    'ROTATE_REFRESH_TOKENS': True,
+    'BLACKLIST_AFTER_ROTATION': True,
+
+    'UPDATE_LAST_LOGIN': True
 }
 
+# Email configuration
+
+
+DEFAULT_FROM_EMAIL = 'midhunraj303@gmail.com'
+
+FRONTEND_URL = 'https://localhost:8000'
