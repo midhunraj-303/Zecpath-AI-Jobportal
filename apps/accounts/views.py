@@ -16,26 +16,51 @@ from .serializers import (
 from django.shortcuts import get_object_or_404
 from apps.accounts.models import User
 from apps.accounts.tokens import email_verification_token
+from services.email_service import send_verification_email
 
+from apps.accounts.permissions import (
+    IsAdmin,
+    IsEmployer,
+    IsCandidate
+)
 
 class UserRegistrationAPIView(APIView):
+    """
+    Register a new user and send an email verification link.
+
+    Newly registered users remain inactive until their email
+    address has been verified.
+    """
 
     permission_classes = [AllowAny]
 
-    def post(self,request):
-        serializer = UserRegistrationSerializer(
-            data = request.data
-        )
+    def post(self, request):
+        """
+        Validate registration data, create the user, and send
+        an email verification link.
+
+        Args:
+            request: The incoming HTTP request.
+
+        Returns:
+            Response: Registration details with HTTP 201,
+            or validation errors with HTTP 400.
+        """
+        serializer = UserRegistrationSerializer(data=request.data)
 
         if serializer.is_valid():
-
             user = serializer.save()
+
+            send_verification_email(user)
 
             response_serializer = UserSerializer(user)
 
             return Response(
                 {
-                    "message": "User registered successfully",
+                    "message": (
+                        "Registration successful. "
+                        "Please check your email to activate your account."
+                    ),
                     "user": response_serializer.data
                 },
                 status=status.HTTP_201_CREATED
@@ -45,6 +70,7 @@ class UserRegistrationAPIView(APIView):
             serializer.errors,
             status=status.HTTP_400_BAD_REQUEST
         )
+
 
 class CurrentUserAPIView(APIView):
 
@@ -145,3 +171,66 @@ class VerifyEmailAPIView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+class RoleTestAPIView(APIView):
+    """
+    Test role-based access control for authenticated users
+
+    Only users with the required role required role can access this endpoint
+
+    """
+
+    permission_clases = [IsAuthenticated]
+
+    def get(self,request):
+        """
+        Return the authenticated user's role.
+
+        Args:
+            request: The imcoming HTTP request.
+
+        Returns:
+            Response: The user's role and access message.
+        """
+
+        return Response({
+            'message': "Authentication successful",
+            'username': request.user.username,
+            'role': request.user.role,
+        })
+
+
+class AdminTestAPIView(APIView):
+    """
+    Test access restricted to admin users.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def get(self,request):
+        """Return a success message for admin users"""
+        return Response({"message": "Welcome, Admin"})
+
+
+class EmployerTestAPIView(APIView):
+    """Test access restricted to employer users."""
+
+    permission_classes = [IsEmployer]
+
+    def get(self,request):
+        """Return a success message for employer users"""
+
+        return Response({"message": "Welcome, Employer"})
+
+
+class CandidateTestAPIView(APIView):
+    """Test access restricted to candidate users."""
+
+    permission_classes = [IsCandidate]
+
+    def get(self, request):
+        """Return a success message for candidate users."""
+
+        return Response({"message": "Welcome, Candidate"})
+    

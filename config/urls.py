@@ -37,5 +37,16 @@ urlpatterns = [
          name='token_refresh'
     ),
 
+    path(
+        'api/employers/',
+        include('apps.employers.urls')
+    ),
+
+    path('api/jobs/', include('apps.jobs.urls')),
+
+    path(
+    'api/applications/',
+    include('apps.applications.urls')
+    ),
 
 ]

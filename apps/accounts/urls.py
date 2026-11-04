@@ -3,7 +3,11 @@ from .views import (
     UserRegistrationAPIView,
     CurrentUserAPIView,
     LogoutAPIView,
-    VerifyEmailAPIView
+    VerifyEmailAPIView,
+    RoleTestAPIView,
+    AdminTestAPIView,
+    EmployerTestAPIView,
+    CandidateTestAPIView
 )
 
 urlpatterns = [
@@ -29,6 +33,11 @@ urlpatterns = [
         VerifyEmailAPIView.as_view(),
         name='verify-email'
     ),
+
+    path('test/role/',RoleTestAPIView.as_view()),
+    path('test/admin/',AdminTestAPIView.as_view()),
+    path('test/employer/',EmployerTestAPIView.as_view()),
+    path('test/candidate/',CandidateTestAPIView.as_view()),
 ]
 
 
