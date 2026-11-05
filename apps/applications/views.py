@@ -13,7 +13,10 @@ from apps.candidates.models import Candidate
 from apps.jobs.models import Job
 
 from .models import Application
-from .serializers import ApplicationSerializer
+from .serializers import (
+    ApplicationSerializer,
+    ApplicationStatusUpdateSerializer
+)
 
 from apps.employers.models import Employer
 
@@ -131,4 +134,29 @@ class ReceivedApplicationsAPIView(generics.ListAPIView):
             .filter(job__employer=employer)
             .select_related('candidate', 'job')
             .order_by('-applied_at')
+        )
+
+
+
+class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
+    """Allow employers to update application statuses for their own jobs."""
+
+    serializer_class = ApplicationStatusUpdateSerializer
+    permission_classes = [IsAuthenticated, IsEmployer]
+
+    lookup_field = 'application_id'
+    lookup_url_kwarg = 'application_id'
+
+    http_method_names = ['patch', 'options', 'head']
+
+    def get_queryset(self):
+        """Return applications belonging to the logged-in employer.
+
+        Returns:
+            QuerySet: Applications for jobs owned by this employer.
+        """
+        return (
+            Application.objects
+            .filter(job__employer__user=self.request.user)
+            .select_related('candidate', 'job', 'job__employer')
         )

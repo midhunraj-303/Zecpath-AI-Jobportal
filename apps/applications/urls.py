@@ -3,7 +3,8 @@ from django.urls import path
 from .views import (
     ApplyForJobAPIView,
     MyApplicationsAPIView,
-    ReceivedApplicationsAPIView
+    ReceivedApplicationsAPIView,
+    UpdateApplicationStatusAPIView
 )
 
 urlpatterns = [
@@ -24,4 +25,12 @@ urlpatterns = [
     ReceivedApplicationsAPIView.as_view(),
     name='received-applications'
     ),
+
+    path(
+        '<int:application_id>/status/',
+        UpdateApplicationStatusAPIView.as_view(),
+        name='update-application-status'
+    ),
+
+
 ]

@@ -1,7 +1,7 @@
 
 from rest_framework import serializers
 
-from .models import Application
+from .models import Application,ApplicationStatus
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -48,3 +48,21 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'applied_at',
             'updated_at'
         ]
+
+
+
+
+
+class ApplicationStatusUpdateSerializer(serializers.ModelSerializer):
+    """Validate and update an application's status."""
+
+    status = serializers.ChoiceField(
+        choices=ApplicationStatus.choices,
+        required=True
+    )
+
+    class Meta:
+        """Define the fields allowed for status updates."""
+
+        model = Application
+        fields = ['status']
