@@ -49,4 +49,9 @@ urlpatterns = [
     include('apps.applications.urls')
     ),
 
+    path(
+    'api/candidates/',
+    include('apps.candidates.urls')
+    ),
+
 ]
