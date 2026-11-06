@@ -1,7 +1,10 @@
 
 from django.urls import path
 
-from .views import CandidateProfileAPIView
+from .views import (
+    CandidateProfileAPIView,
+    ResumeAPIView
+)
 
 
 urlpatterns = [
@@ -10,4 +13,10 @@ urlpatterns = [
         CandidateProfileAPIView.as_view(),
         name='candidate-profile'
     ),
+
+    path('resume/',
+         ResumeAPIView.as_view(),
+         name='candidate-resume'
+    ),
+
 ]

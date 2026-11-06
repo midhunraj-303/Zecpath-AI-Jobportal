@@ -2,6 +2,8 @@
 from rest_framework import serializers
 
 from .models import Candidate, Education, Experience
+from pathlib import Path
+from zipfile import BadZipFile, ZipFile
 
 
 class EducationSerializer(serializers.ModelSerializer):
@@ -184,3 +186,92 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+
+
+class ResumeUploadSerializer(serializers.Serializer):
+    """Validate resume files uploaded by candidates."""
+
+    resume = serializers.FileField()
+
+    MAX_FILE_SIZE = 5 * 1024 * 1024
+
+    ALLOWED_EXTENSIONS = {
+        '.pdf',
+        '.doc',
+        '.docx',
+    }
+
+    def validate_resume(self, uploaded_file):
+        """Validate the resume's size, extension, and file signature.
+
+        Args:
+            uploaded_file: Uploaded resume file.
+
+        Returns:
+            UploadedFile: Validated resume file.
+
+        Raises:
+            serializers.ValidationError: If the file is invalid.
+        """
+        extension = Path(uploaded_file.name).suffix.lower()
+
+        if extension not in self.ALLOWED_EXTENSIONS:
+            raise serializers.ValidationError(
+                'Only PDF, DOC, and DOCX files are allowed.'
+            )
+
+        if uploaded_file.size == 0:
+            raise serializers.ValidationError(
+                'Empty files cannot be uploaded.'
+            )
+
+        if uploaded_file.size > self.MAX_FILE_SIZE:
+            raise serializers.ValidationError(
+                'Resume file size cannot exceed 5 MB.'
+            )
+
+        uploaded_file.seek(0)
+        file_header = uploaded_file.read(1024)
+        uploaded_file.seek(0)
+
+        if extension == '.pdf':
+            if b'%PDF-' not in file_header:
+                raise serializers.ValidationError(
+                    'The uploaded file is not a valid PDF.'
+                )
+
+        elif extension == '.doc':
+            doc_signature = bytes.fromhex(
+                'D0 CF 11 E0 A1 B1 1A E1'
+            )
+
+            if not file_header.startswith(doc_signature):
+                raise serializers.ValidationError(
+                    'The uploaded file is not a valid DOC document.'
+                )
+
+        elif extension == '.docx':
+            try:
+                uploaded_file.seek(0)
+
+                with ZipFile(uploaded_file) as archive:
+                    file_names = archive.namelist()
+
+                    if (
+                        '[Content_Types].xml' not in file_names
+                        or 'word/document.xml' not in file_names
+                    ):
+                        raise serializers.ValidationError(
+                            'The uploaded file is not a valid DOCX document.'
+                        )
+
+            except (BadZipFile, OSError):
+                raise serializers.ValidationError(
+                    'The uploaded file is not a valid DOCX document.'
+                )
+
+            finally:
+                uploaded_file.seek(0)
+
+        return uploaded_file
