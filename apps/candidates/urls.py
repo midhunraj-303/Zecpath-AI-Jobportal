@@ -3,7 +3,8 @@ from django.urls import path
 
 from .views import (
     CandidateProfileAPIView,
-    ResumeAPIView
+    ResumeAPIView,
+    CandidateResumeDownloadAPIView
 )
 
 
@@ -18,5 +19,12 @@ urlpatterns = [
          ResumeAPIView.as_view(),
          name='candidate-resume'
     ),
+
+    path(
+    'resume/download/',
+    CandidateResumeDownloadAPIView.as_view(),
+    name='candidate-resume-download'
+    ),
+    
 
 ]

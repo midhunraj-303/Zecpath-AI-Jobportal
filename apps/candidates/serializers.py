@@ -115,11 +115,14 @@ class ExperienceSerializer(serializers.ModelSerializer):
         return attrs
 
 
+
 class CandidateProfileSerializer(serializers.ModelSerializer):
     """Serialize and validate candidate profile information."""
 
     educations = EducationSerializer(many=True, read_only=True)
     experiences = ExperienceSerializer(many=True, read_only=True)
+
+    resume_name = serializers.SerializerMethodField()
 
     class Meta:
         """Define the fields exposed by the candidate profile API."""
@@ -129,7 +132,7 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
         fields = [
             'candidate_id',
             'full_name',
-            'resume',
+            'resume_name',
             'skills',
             'location',
             'expected_salary',
@@ -141,11 +144,26 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 
         read_only_fields = [
             'candidate_id',
+            'resume_name',
             'educations',
             'experiences',
             'created_at',
             'updated_at',
         ]
+
+    def get_resume_name(self, obj):
+        """Return the stored resume filename without exposing its URL.
+
+        Args:
+            obj: Candidate profile instance.
+
+        Returns:
+            str or None: Resume filename, if one exists.
+        """
+        if not obj.resume:
+            return None
+
+        return obj.resume.name.rsplit('/', 1)[-1]
 
     def validate_full_name(self, value):
         """Reject candidate names containing only whitespace.
@@ -186,7 +204,6 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
             )
 
         return value
-
 
 
 class ResumeUploadSerializer(serializers.Serializer):

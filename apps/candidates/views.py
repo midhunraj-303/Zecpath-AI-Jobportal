@@ -19,6 +19,7 @@ from .serializers import (
 )
 from django.db import transaction
 from rest_framework.parsers import MultiPartParser, FormParser
+from django.http import FileResponse
 
 
 class CandidateProfileAPIView(APIView):
@@ -255,4 +256,48 @@ class ResumeAPIView(APIView):
             status=status.HTTP_200_OK
             if old_resume_name
             else status.HTTP_201_CREATED
+        )
+
+
+
+class CandidateResumeDownloadAPIView(APIView):
+    """Allow candidates to securely download their own resumes."""
+
+    permission_classes = [IsAuthenticated, IsCandidate]
+
+    def get(self, request):
+        """Download the authenticated candidate's resume.
+
+        Args:
+            request: The authenticated API request.
+
+        Returns:
+            FileResponse: The candidate's resume as an attachment.
+
+        Raises:
+            Http404: If the profile or resume does not exist.
+        """
+        candidate = get_object_or_404(
+            Candidate.active_objects,
+            user=request.user
+        )
+
+        if not candidate.resume:
+            return Response(
+                {'error': 'Resume not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        if not candidate.resume.storage.exists(
+            candidate.resume.name
+        ):
+            return Response(
+                {'error': 'Resume file is missing from storage.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        return FileResponse(
+            candidate.resume.open('rb'),
+            as_attachment=True,
+            filename=candidate.resume.name.rsplit('/', 1)[-1]
         )
