@@ -1,7 +1,9 @@
 
 from rest_framework import serializers
 
-from .models import Application,ApplicationStatus
+from apps.candidates.serializers import ResumeUploadSerializer
+
+from .models import Application, ApplicationStatus
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -22,6 +24,14 @@ class ApplicationSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    resume = serializers.FileField(
+        write_only=True, # does not return the file or its URL in the response
+        required=False, # two choices
+        allow_null=True
+    )
+
+    resume_name = serializers.SerializerMethodField()
+
     class Meta:
         """Define the fields exposed by the Application API."""
 
@@ -33,6 +43,7 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'job_id',
             'job_title',
             'resume',
+            'resume_name',
             'cover_letter',
             'status',
             'applied_at',
@@ -44,13 +55,48 @@ class ApplicationSerializer(serializers.ModelSerializer):
             'candidate_id',
             'job_id',
             'job_title',
+            'resume_name',
             'status',
             'applied_at',
             'updated_at'
         ]
 
+    def validate_resume(self, uploaded_file):
+        """Validate an application-specific resume.
 
+        Args:
+            uploaded_file: The uploaded resume file.
 
+        Returns:
+            UploadedFile: The validated resume file.
+
+        Raises:
+            serializers.ValidationError: If the resume is invalid.
+        """
+        if uploaded_file is None:
+            return uploaded_file
+
+        validator = ResumeUploadSerializer(
+            data={'resume': uploaded_file}
+        )
+
+        validator.is_valid(raise_exception=True)
+
+        return validator.validated_data['resume']
+
+    def get_resume_name(self, obj):
+        """Return the resume filename without exposing its URL.
+
+        Args:
+            obj: Application model instance.
+
+        Returns:
+            str or None: The stored resume filename.
+        """
+        if not obj.resume:
+            return None
+
+        return obj.resume.name.rsplit('/', 1)[-1]
 
 
 class ApplicationStatusUpdateSerializer(serializers.ModelSerializer):

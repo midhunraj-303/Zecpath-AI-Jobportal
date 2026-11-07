@@ -1,10 +1,12 @@
+
 from django.urls import path
 
 from .views import (
     ApplyForJobAPIView,
     MyApplicationsAPIView,
     ReceivedApplicationsAPIView,
-    UpdateApplicationStatusAPIView
+    UpdateApplicationStatusAPIView,
+    ApplicationResumeDownloadAPIView,
 )
 
 urlpatterns = [
@@ -21,9 +23,9 @@ urlpatterns = [
     ),
 
     path(
-    'received/',
-    ReceivedApplicationsAPIView.as_view(),
-    name='received-applications'
+        'received/',
+        ReceivedApplicationsAPIView.as_view(),
+        name='received-applications'
     ),
 
     path(
@@ -32,5 +34,9 @@ urlpatterns = [
         name='update-application-status'
     ),
 
-
+    path(
+        '<int:application_id>/resume/',
+        ApplicationResumeDownloadAPIView.as_view(),
+        name='application-resume-download'
+    ),
 ]
