@@ -181,7 +181,7 @@ class RoleTestAPIView(APIView):
 
     """
 
-    permission_clases = [IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get(self,request):
         """
