@@ -186,10 +186,6 @@ class MyApplicationsAPIView(generics.ListAPIView):
 
 
 
-
-
-
-
 class ReceivedApplicationsAPIView(generics.ListAPIView):
     """List applications received for the employer's own jobs."""
 
