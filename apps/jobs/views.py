@@ -20,7 +20,7 @@ from apps.employers.models import Employer
 from .models import Job
 from .serializers import JobSerializer
 
-
+from utils.pagination import StandardResultsSetPagination
 
 class JobListCreateAPIView(APIView):
     """
@@ -31,13 +31,13 @@ class JobListCreateAPIView(APIView):
 
     def get(self, request):
         """
-        Retrieve all jobs created by the authenticated employer.
+        Retrieve paginated jobs created by the authenticated employer.
 
         Args:
             request: The incoming HTTP request.
 
         Returns:
-            Response: List of the employer's jobs.
+            Response: Paginated list of the employer's jobs.
         """
 
         try:
@@ -52,13 +52,20 @@ class JobListCreateAPIView(APIView):
             employer=employer
         ).order_by('-created_at')
 
-        serializer = JobSerializer(jobs, many=True)
-
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
+        paginator = StandardResultsSetPagination()
+        paginated_jobs = paginator.paginate_queryset(
+            jobs,
+            request
         )
 
+        serializer = JobSerializer(
+            paginated_jobs,
+            many=True
+        )
+
+        return paginator.get_paginated_response(
+            serializer.data
+        )
     def post(self, request):
         """
         Create a job for the authenticated employer.
@@ -274,30 +281,36 @@ class AdminJobListAPIView(APIView):
 
     permission_classes = [IsAdmin]
 
+
     def get(self, request):
         """
-        Retrieve all jobs posted by all employers.
+        Retrieve paginated jobs posted by all employers.
 
         Args:
             request: The incoming HTTP request.
 
         Returns:
-            Response: A list containing all job records.
+            Response: Paginated list of all job records.
         """
 
-        jobs = Job.objects.select_related(
+        jobs = Job.objects.select_related(  # Job model has a relationship with Employer, and Employer has a relationship with User
             'employer',
             'employer__user'
         ).order_by('-created_at')
 
-        serializer = JobSerializer(
+        paginator = StandardResultsSetPagination()
+        paginated_jobs = paginator.paginate_queryset(
             jobs,
+            request
+        )
+
+        serializer = JobSerializer(
+            paginated_jobs,
             many=True
         )
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
+        return paginator.get_paginated_response(
+            serializer.data
         )
 
 
@@ -308,31 +321,37 @@ class AvailableJobListAPIView(APIView):
 
     permission_classes = [AllowAny]
 
+
     def get(self, request):
         """
-        Retrieve all active jobs.
+        Retrieve paginated active job postings for public users.
 
         Args:
             request: The incoming HTTP request.
 
         Returns:
-            Response: A list of active job postings.
+            Response: Paginated list of active jobs.
         """
 
-        jobs = Job.objects.filter(
+        jobs = Job.objects.filter(  #ensures inactive jobs are never publicly displayed.
             is_active=True
-        ).select_related(
+        ).select_related(           #efficiently retrieves employer information.
             'employer'
-        ).order_by('-created_at')
+        ).order_by('-created_at')   #displays newest jobs first.
+
+        paginator = StandardResultsSetPagination()   #applies our reusable pagination settings.
+        paginated_jobs = paginator.paginate_queryset(
+            jobs,
+            request
+        )
 
         serializer = JobSerializer(
-            jobs,
+            paginated_jobs,
             many=True
         )
 
-        return Response(
-            serializer.data,
-            status=status.HTTP_200_OK
+        return paginator.get_paginated_response(
+            serializer.data
         )
 
 

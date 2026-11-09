@@ -27,6 +27,7 @@ from django.db import transaction
 
 from django.http import FileResponse
 from rest_framework.views import APIView
+from utils.pagination import StandardResultsSetPagination
 
 
 class ApplyForJobAPIView(generics.CreateAPIView):
@@ -156,11 +157,13 @@ class ApplyForJobAPIView(generics.CreateAPIView):
 
 
 
+
 class MyApplicationsAPIView(generics.ListAPIView):
     """List applications submitted by the authenticated candidate."""
 
     serializer_class = ApplicationSerializer
     permission_classes = [IsAuthenticated, IsCandidate]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """Return applications belonging to the current candidate.
@@ -186,11 +189,13 @@ class MyApplicationsAPIView(generics.ListAPIView):
 
 
 
+
 class ReceivedApplicationsAPIView(generics.ListAPIView):
     """List applications received for the employer's own jobs."""
 
     serializer_class = ApplicationSerializer
     permission_classes = [IsAuthenticated, IsEmployer]
+    pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
         """Return applications for jobs owned by the logged-in employer.
