@@ -21,6 +21,9 @@ from .models import Job
 from .serializers import JobSerializer
 
 from utils.pagination import StandardResultsSetPagination
+from django.utils.dateparse import parse_date
+
+from django.db.models import Q  # Combine multiple conditions using OR
 
 class JobListCreateAPIView(APIView):
     """
@@ -298,6 +301,7 @@ class AdminJobListAPIView(APIView):
             'employer__user'
         ).order_by('-created_at')
 
+        # pagination
         paginator = StandardResultsSetPagination()
         paginated_jobs = paginator.paginate_queryset(
             jobs,
@@ -339,6 +343,62 @@ class AvailableJobListAPIView(APIView):
             'employer'
         ).order_by('-created_at')   #displays newest jobs first.
 
+        
+        # filter using Job role
+        role = request.query_params.get('role')
+
+        if role:
+            jobs = jobs.filter(job_title__icontains=role)
+
+
+        # Filter jobs by posting date
+        posted_date = request.query_params.get('date')
+
+        if posted_date:
+            parsed_date = parse_date(posted_date)
+
+            if parsed_date is None:
+                return Response(
+                    {"error": "Invalid date format. Use YYYY-MM-DD."},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            jobs = jobs.filter(
+                created_at__date=parsed_date
+            )
+
+        # Filter jobs by status
+        job_status = request.query_params.get('status')
+
+        if job_status:
+            job_status = job_status.upper()
+
+            if job_status == 'ACTIVE':
+                jobs = jobs.filter(is_active=True)
+
+            elif job_status == 'INACTIVE':
+                jobs = jobs.filter(is_active=False)
+
+            else:
+                return Response(
+                    {
+                        "error": "Invalid status. Use ACTIVE or INACTIVE."
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+
+        # Search jobs by keyword
+        search_keyword = request.query_params.get('search')
+
+        if search_keyword:
+            jobs = jobs.filter(
+                Q(job_title__icontains=search_keyword) |
+                Q(description__icontains=search_keyword) |
+                Q(location__icontains=search_keyword)
+            )
+
+        # pagination
         paginator = StandardResultsSetPagination()   #applies our reusable pagination settings.
         paginated_jobs = paginator.paginate_queryset(
             jobs,
