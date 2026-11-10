@@ -85,7 +85,10 @@ class ApplyForJobAPIView(generics.CreateAPIView):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        uploaded_resume = serializer.validated_data.get('resume')
+        uploaded_resume = serializer.validated_data.pop(
+            'resume',
+            None
+        )
 
         # Use the profile resume when no custom resume is uploaded.
         if uploaded_resume is None:
@@ -112,18 +115,25 @@ class ApplyForJobAPIView(generics.CreateAPIView):
                 )
 
         application = None
+        new_resume_name = None
+
         resume_storage = Application._meta.get_field('resume').storage
 
         try:
-            with transaction.atomic():  #application record and its resume copy to be handled as one database transaction 
-                # Create the application.
+            with transaction.atomic():
                 application = serializer.save(
                     candidate=candidate,
                     job=job
                 )
 
-                # Copy the profile resume if no custom resume was uploaded.
-                if uploaded_resume is None:
+                if uploaded_resume is not None:
+                    application.resume.save(
+                        uploaded_resume.name,
+                        uploaded_resume,
+                        save=True
+                    )
+
+                else:
                     profile_resume_name = candidate.resume.name
 
                     candidate.resume.open('rb')
@@ -141,12 +151,19 @@ class ApplyForJobAPIView(generics.CreateAPIView):
                         save=True
                     )
 
-                
+                new_resume_name = application.resume.name
 
         except Exception:
-            # Remove a newly stored file if the database operation fails.
-            if application and application.resume:
-                resume_storage.delete(application.resume.name)
+            stored_file_name = new_resume_name
+
+            if not stored_file_name and application and application.resume:
+                stored_file_name = application.resume.name
+
+            if (
+                stored_file_name
+                and resume_storage.exists(stored_file_name)
+            ):
+                resume_storage.delete(stored_file_name)
 
             raise
 

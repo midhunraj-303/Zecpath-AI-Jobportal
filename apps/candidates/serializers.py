@@ -279,6 +279,16 @@ class ResumeUploadSerializer(serializers.Serializer):
                 with ZipFile(uploaded_file) as archive:
                     file_entries = archive.infolist()
 
+                    file_names = [
+                        entry.filename
+                        for entry in file_entries
+                    ]
+
+                    if len(file_names) != len(set(file_names)):
+                        raise serializers.ValidationError(
+                            'DOCX archive contains duplicate file entries.'
+                        )
+
                     # Check the number of files in the archive.
                     if len(file_entries) > self.MAX_DOCX_ENTRIES:
                         raise serializers.ValidationError(
@@ -318,7 +328,7 @@ class ResumeUploadSerializer(serializers.Serializer):
                                 'DOCX archive has an unsafe compression ratio.'
                             )
 
-                    file_names = archive.namelist()
+                
 
                     # Verify the required Word document components.
                     if (
