@@ -44,7 +44,7 @@ class JobListCreateAPIView(APIView):
         """
 
         try:
-            employer = Employer.objects.get(user=request.user)
+            employer = Employer.active_objects.get(user=request.user)
         except Employer.DoesNotExist:
             return Response(
                 {"error": "Employer profile not found."},
