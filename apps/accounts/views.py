@@ -87,18 +87,37 @@ class CurrentUserAPIView(APIView):
 
 
 class LogoutAPIView(APIView):
+    """
+    Handle logout requests for authenticated users.
+
+    Blacklists the user's refresh token to prevent its reuse.
+    """
 
     permission_classes = [IsAuthenticated]
 
-    def post(self,request):
-        serializer = LogoutSerializer(data=request.data)
-        serializer.is_valid(raise_exception = True)
+    def post(self, request):
+        """
+        Validate and blacklist the submitted refresh token.
+
+        Args:
+            request: The HTTP request containing the refresh token.
+
+        Returns:
+            Response: Logout confirmation or validation errors.
+        """
+        serializer = LogoutSerializer(
+            data=request.data,
+            context={'request': request}
+        )
+
+        serializer.is_valid(raise_exception=True)
         serializer.save()
 
         return Response(
-            {"message":"Logout successful"},
+            {"message": "Logout successful"},
             status=status.HTTP_200_OK
         )
+
 
 
 
@@ -106,16 +125,15 @@ class VerifyEmailAPIView(APIView):
     """
     Verify a user's email address and activate their account.
 
-    This endpoint accepts a user ID and verification token.
-    If the token is valid, the user's email is marked as verified
-    and their account is activated.
+    This endpoint validates the verification token before
+    activating the user's account.
     """
 
     permission_classes = [AllowAny]
 
     def get(self, request, user_id, token):
         """
-        Validate the email verification token and activate the user.
+        Validate the verification token and activate the account.
 
         Args:
             request: The incoming HTTP request.
@@ -123,27 +141,19 @@ class VerifyEmailAPIView(APIView):
             token: The email verification token.
 
         Returns:
-            Response: A success response if verification succeeds,
-            or an error response if the token is invalid or expired.
-
-        Raises:
-            Http404: If no user exists with the supplied user ID.
+            Response: Verification success or a generic error.
         """
 
-        user = get_object_or_404(
-            User,
+        user = User.objects.filter(
             user_id=user_id
-        )
+        ).first()
 
-        if user.is_verified and user.is_active:
-            return Response(
-                {
-                    "message": "Email is already verified."
-                },
-                status=status.HTTP_200_OK
-            )
-
-        if not email_verification_token.check_token(user, token):
+        # Use the same response for nonexistent users
+        # and invalid or expired verification tokens.
+        if (
+            user is None
+            or not email_verification_token.check_token(user, token)
+        ):
             return Response(
                 {
                     "error": "Invalid or expired verification link."

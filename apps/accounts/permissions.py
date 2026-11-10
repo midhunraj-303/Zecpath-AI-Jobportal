@@ -1,80 +1,65 @@
+
 """
 Custom permission classes for role-based access control.
 
 These permissions restrict API access based on the authenticated
-user's role.
+user's role and account status.
 """
+
 from rest_framework.permissions import BasePermission
 
-class IsAdmin(BasePermission):
+
+class BaseRolePermission(BasePermission):
     """
-    Allow access only to authenticated admin users
+    Base permission class for role-based access control.
+
+    Subclasses must define the required_role attribute.
     """
 
-    def has_permission(self,request,view):
+    required_role = None
+
+    def has_permission(self, request, view):
         """
-        Check whether the user has the ADMIN role
+        Check authentication, account status, and user role.
 
         Args:
             request: The incoming HTTP request.
-            view: The API view being accessed
+            view: The API view being accessed.
 
         Returns:
-            bool: True if the user is an admin; Otherwise False
+            bool: True if the user satisfies all requirements.
         """
 
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == 'ADMIN'
+        user = request.user
+
+        return bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.is_verified
+            and user.role == self.required_role
         )
 
 
-
-class IsEmployer(BasePermission):
+class IsAdmin(BaseRolePermission):
     """
-    Allow access only to authenticated employer users
-    """
-
-    def has_permission(self,request,view):
-        """
-        Check whether the user has the EMPLOYER role
-
-        Args:
-            request: The incoming HTTP request.
-            view: The API view being accessed
-
-        Returns:
-            bool: True if the user is an employer; Otherwise False
-        """
-
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == 'EMPLOYER'
-        )
-
-
-class IsCandidate(BasePermission):
-    """
-    Allow access only to authenticated candidate users
+    Allow access only to active, verified admin users.
     """
 
-    def has_permission(self,request,view):
-        """
-        Check whether the user has the CANDIDATE role
+    required_role = 'ADMIN'
 
-        Args:
-            request: The incoming HTTP request.
-            view: The API view being accessed
 
-        Returns:
-            bool: True if the user is a candidate; Otherwise False
-        """
+class IsEmployer(BaseRolePermission):
+    """
+    Allow access only to active, verified employer users.
+    """
 
-        return (
-            request.user
-            and request.user.is_authenticated
-            and request.user.role == 'CANDIDATE'
-        )
+    required_role = 'EMPLOYER'
 
+
+class IsCandidate(BaseRolePermission):
+    """
+    Allow access only to active, verified candidate users.
+    """
+
+    required_role = 'CANDIDATE'

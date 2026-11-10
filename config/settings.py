@@ -12,22 +12,28 @@ https://docs.djangoproject.com/en/6.1/ref/settings/
 
 from pathlib import Path
 from datetime import timedelta
+from dotenv import load_dotenv
+import os
 
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
+# Load environment variables from the project root .env file.
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/6.1/howto/deployment/checklist/
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-1e&#13=e2pp7hc!*zv_tp8hpl(97b!o-!5n4v$5hr(afrtm%^o'
+# Security settings
+SECRET_KEY = os.getenv('SECRET_KEY')
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = os.getenv(
+    'ALLOWED_HOSTS',
+    ''
+).split(',')
 
 
 # Application definition
@@ -140,11 +146,10 @@ MEDIA_ROOT = BASE_DIR / 'media'
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+# Email configuration
+EMAIL_BACKEND = (
+    'django.core.mail.backends.console.EmailBackend'
+)
 
 AUTH_USER_MODEL = 'accounts.User'
 
@@ -176,8 +181,18 @@ SIMPLE_JWT = {
 }
 
 # Email configuration
+EMAIL_BACKEND = os.getenv(
+    'EMAIL_BACKEND',
+    'django.core.mail.backends.console.EmailBackend'
+)
 
+DEFAULT_FROM_EMAIL = os.getenv(
+    'DEFAULT_FROM_EMAIL',
+    'webmaster@localhost'
+)
 
-DEFAULT_FROM_EMAIL = 'midhunraj303@gmail.com'
-
-FRONTEND_URL = 'https://localhost:8000'
+# Application URLs
+FRONTEND_URL = os.getenv(
+    'FRONTEND_URL',
+    'http://127.0.0.1:8000'
+)

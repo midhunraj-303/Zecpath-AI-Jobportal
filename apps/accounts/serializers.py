@@ -75,34 +75,60 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
         return user
 
 class LogoutSerializer(serializers.Serializer):
+    """
+    Serializer for securely logging out an authenticated user.
+
+    Validates the refresh token, verifies token ownership,
+    and blacklists the token to prevent further use.
+    """
 
     refresh = serializers.CharField()
 
     def validate_refresh(self, value):
+        """
+        Validate the refresh token and verify its ownership.
 
+        Args:
+            value: The refresh token submitted by the user.
+
+        Returns:
+            str: The validated refresh token.
+
+        Raises:
+            serializers.ValidationError: If the token is invalid,
+                expired, blacklisted, or belongs to another user.
+        """
         try:
             token = RefreshToken(value)
 
-            # Check whether the token is already blacklisted
-            if BlacklistedToken.objects.filter(
-                token__jti=token['jti']
-            ).exists():
+            request = self.context.get('request')
 
+            if request is None or not request.user.is_authenticated:
                 raise serializers.ValidationError(
-                    "This refresh token has already been blacklisted."
+                    "Authentication is required."
                 )
+
+            token_user_id = token.get('user_id')
+
+            if str(token_user_id) != str(request.user.user_id):
+                raise serializers.ValidationError(
+                    "You cannot logout using another user's refresh token."
+                )
+
+            self._refresh_token = token
 
         except TokenError:
             raise serializers.ValidationError(
-                "Invalid or expired refresh token."
+                "Invalid, expired, or already blacklisted refresh token."
             )
 
         return value
 
     def save(self, **kwargs):
+        """
+        Blacklist the validated refresh token.
 
-        token = RefreshToken(
-            self.validated_data['refresh']
-        )
-
-        token.blacklist()
+        Returns:
+            None
+        """
+        self._refresh_token.blacklist()
