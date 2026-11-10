@@ -237,7 +237,8 @@ class ResumeAPIView(APIView):
 
                 if old_resume_name:
                     transaction.on_commit(
-                        lambda: storage.delete(old_resume_name)
+                        lambda: storage.delete(old_resume_name),
+                        robust=True
                     )
 
         except Exception:

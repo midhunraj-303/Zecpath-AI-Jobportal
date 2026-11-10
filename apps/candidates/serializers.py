@@ -213,6 +213,10 @@ class ResumeUploadSerializer(serializers.Serializer):
 
     MAX_FILE_SIZE = 5 * 1024 * 1024
 
+    MAX_DOCX_ENTRIES = 1000
+    MAX_DOCX_UNCOMPRESSED_SIZE = 25 * 1024 * 1024
+    MAX_COMPRESSION_RATIO = 100
+
     ALLOWED_EXTENSIONS = {
         '.pdf',
         '.doc',
@@ -273,8 +277,50 @@ class ResumeUploadSerializer(serializers.Serializer):
                 uploaded_file.seek(0)
 
                 with ZipFile(uploaded_file) as archive:
+                    file_entries = archive.infolist()
+
+                    # Check the number of files in the archive.
+                    if len(file_entries) > self.MAX_DOCX_ENTRIES:
+                        raise serializers.ValidationError(
+                            'DOCX archive contains too many files.'
+                        )
+
+                    # Check the total uncompressed archive size.
+                    total_uncompressed_size = sum(
+                        entry.file_size
+                        for entry in file_entries
+                    )
+
+                    if (
+                        total_uncompressed_size
+                        > self.MAX_DOCX_UNCOMPRESSED_SIZE
+                    ):
+                        raise serializers.ValidationError(
+                            'DOCX archive exceeds the allowed uncompressed size.'
+                        )
+
+                    # Check individual file compression ratios.
+                    for entry in file_entries:
+                        if entry.file_size == 0:
+                            continue
+
+                        if entry.compress_size == 0:
+                            raise serializers.ValidationError(
+                                'DOCX archive contains an invalid compressed entry.'
+                            )
+
+                        compression_ratio = (
+                            entry.file_size / entry.compress_size
+                        )
+
+                        if compression_ratio > self.MAX_COMPRESSION_RATIO:
+                            raise serializers.ValidationError(
+                                'DOCX archive has an unsafe compression ratio.'
+                            )
+
                     file_names = archive.namelist()
 
+                    # Verify the required Word document components.
                     if (
                         '[Content_Types].xml' not in file_names
                         or 'word/document.xml' not in file_names
@@ -283,12 +329,19 @@ class ResumeUploadSerializer(serializers.Serializer):
                             'The uploaded file is not a valid DOCX document.'
                         )
 
-            except (BadZipFile, OSError):
+                    # Verify that the archive entries can be read.
+                    bad_file = archive.testzip()
+
+                    if bad_file is not None:
+                        raise serializers.ValidationError(
+                            'DOCX archive contains corrupted data.'
+                        )
+
+            except (BadZipFile, OSError, RuntimeError):
                 raise serializers.ValidationError(
                     'The uploaded file is not a valid DOCX document.'
                 )
 
             finally:
                 uploaded_file.seek(0)
-
         return uploaded_file
