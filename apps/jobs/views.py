@@ -81,7 +81,7 @@ class JobListCreateAPIView(APIView):
         """
 
         try:
-            employer = Employer.objects.get(user=request.user)
+            employer = Employer.active_objects.get(user=request.user)
         except Employer.DoesNotExist:
             return Response(
                 {"error": "Employer profile not found."},
@@ -115,33 +115,21 @@ class JobDetailAPIView(APIView):
 
     def get_object(self, request, job_id):
         """
-        Retrieve a job based on the authenticated user's role.
+        Retrieve a job based on the user's role and ownership.
 
-        Admins can retrieve any job.
-        Employers can retrieve only their own jobs.
-
-        Args:
-            request: The incoming HTTP request.
-            job_id: The primary key of the requested job.
-
-        Returns:
-            Job: The requested job object.
-
-        Raises:
-            Job.DoesNotExist: If the job is not accessible.
-            Employer.DoesNotExist: If the employer profile is missing.
+        Admin users can access any job. Employers can access only
+        jobs belonging to their active employer profile.
         """
 
         if request.user.role == 'ADMIN':
             return Job.objects.get(job_id=job_id)
 
-        employer = Employer.objects.get(user=request.user)
+        employer = Employer.active_objects.get(user=request.user)
 
         return Job.objects.get(
             job_id=job_id,
             employer=employer
         )
-
 
     def get(self, request, job_id):
         """
