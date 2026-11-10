@@ -173,7 +173,7 @@ class MyApplicationsAPIView(generics.ListAPIView):
         """
 
         candidate = get_object_or_404(
-            Candidate,
+            Candidate.active_objects,
             user=self.request.user
         )
 
@@ -194,14 +194,15 @@ class ReceivedApplicationsAPIView(generics.ListAPIView):
     pagination_class = StandardResultsSetPagination
 
     def get_queryset(self):
-        """Return applications for jobs owned by the logged-in employer.
+        """
+        Return applications received for the current active employer.
 
         Returns:
-            QuerySet: Applications received for the employer's jobs.
+            QuerySet: Applications for jobs owned by this employer.
         """
 
         employer = get_object_or_404(
-            Employer,
+            Employer.active_objects,
             user=self.request.user
         )
 
@@ -211,7 +212,6 @@ class ReceivedApplicationsAPIView(generics.ListAPIView):
             .select_related('candidate', 'job')
             .order_by('-applied_at')
         )
-
 
 
 class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
@@ -226,14 +226,21 @@ class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
     http_method_names = ['patch', 'options', 'head']
 
     def get_queryset(self):
-        """Return applications belonging to the logged-in employer.
+        """
+        Return applications belonging to the current active employer.
 
         Returns:
             QuerySet: Applications for jobs owned by this employer.
         """
+
+        employer = get_object_or_404(
+            Employer.active_objects,
+            user=self.request.user
+        )
+
         return (
             Application.objects
-            .filter(job__employer__user=self.request.user)
+            .filter(job__employer=employer)
             .select_related('candidate', 'job', 'job__employer')
         )
 
