@@ -254,26 +254,31 @@ class ApplicationResumeDownloadAPIView(APIView):
     ]
 
     def get(self, request, application_id):
-        """Download the resume attached to a specific application.
+        """
+        Download an application resume.
 
-        Employers can access applications for their own jobs.
-        Admins can access applications belonging to any employer.
+        Employers can download resumes for their own jobs.
+        Admins can download resumes across all employers.
 
         Args:
             request: The authenticated API request.
-            application_id: The ID of the application.
+            application_id: The application ID.
 
         Returns:
-            FileResponse: The application resume as a download.
-
-        Raises:
-            Http404: If the application or resume is not available.
+            FileResponse: The requested resume as a download.
         """
+
         if request.user.role == 'ADMIN':
             queryset = Application.objects.all()
+
         else:
+            employer = get_object_or_404(
+                Employer.active_objects,
+                user=request.user
+            )
+
             queryset = Application.objects.filter(
-                job__employer__user=request.user
+                job__employer=employer
             )
 
         application = get_object_or_404(
