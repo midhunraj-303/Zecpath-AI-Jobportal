@@ -28,7 +28,7 @@ class Application(models.Model):
 
     job = models.ForeignKey(
         Job,
-        on_delete=models.CASCADE,
+        on_delete=models.PROTECT,
         related_name='applications'
     )
 

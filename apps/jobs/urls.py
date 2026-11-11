@@ -10,7 +10,9 @@ from .views import (
     JobDetailAPIView,
     AdminJobListAPIView,
     AvailableJobListAPIView,
-    AvailableJobDetailAPIView
+    AvailableJobDetailAPIView,
+    AdminJobRestoreAPIView,
+    JobStatusUpdateAPIView
 )
 
 urlpatterns = [
@@ -42,6 +44,18 @@ urlpatterns = [
     'available/<int:job_id>/',
     AvailableJobDetailAPIView.as_view(),
     name='available-job-detail'
+    ),
+
+    path(
+    'admin/<int:job_id>/restore/',
+    AdminJobRestoreAPIView.as_view(),
+    name='admin-job-restore'
+    ),
+
+    path(
+    '<int:job_id>/status/',
+    JobStatusUpdateAPIView.as_view(),
+    name='job-status-update'
     ),
 
 ]

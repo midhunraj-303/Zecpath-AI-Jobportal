@@ -21,7 +21,7 @@ class JobSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        """Define the model and fields exposed by the serializer."""
+        """Define the model fields exposed through the API."""
 
         model = Job
 
@@ -30,11 +30,27 @@ class JobSerializer(serializers.ModelSerializer):
             'employer_id',
             'job_title',
             'description',
-            'location',
+            'responsibilities',
+            'qualifications',
+            'benefits',
+            'skills',
+            'min_experience',
+            'max_experience',
+            'salary_min',
+            'salary_max',
+            'salary_currency',
+            'salary_period',
             'salary',
+            'location',
             'employment_type',
             'work_mode',
+            'vacancies',
+            'application_deadline',
+            'status',
+            'published_at',
             'is_active',
+            'is_deleted',
+            'deleted_at',
             'created_at',
             'updated_at',
         ]
@@ -42,6 +58,63 @@ class JobSerializer(serializers.ModelSerializer):
         read_only_fields = [
             'job_id',
             'employer_id',
+            'status',
+            'is_active',
+            'published_at',
+            'is_deleted',
+            'deleted_at',
             'created_at',
             'updated_at',
         ]
+
+    def validate(self, attrs):
+        """
+        Validate experience and salary ranges.
+        """
+
+        instance = self.instance
+
+        min_experience = attrs.get(
+            'min_experience',
+            instance.min_experience if instance else 0
+        )
+
+        max_experience = attrs.get(
+            'max_experience',
+            instance.max_experience if instance else None
+        )
+
+        salary_min = attrs.get(
+            'salary_min',
+            instance.salary_min if instance else None
+        )
+
+        salary_max = attrs.get(
+            'salary_max',
+            instance.salary_max if instance else None
+        )
+
+        if (
+            max_experience is not None
+            and min_experience > max_experience
+        ):
+            raise serializers.ValidationError({
+                'max_experience': (
+                    'Maximum experience must be greater than '
+                    'or equal to minimum experience.'
+                )
+            })
+
+        if (
+            salary_min is not None
+            and salary_max is not None
+            and salary_min > salary_max
+        ):
+            raise serializers.ValidationError({
+                'salary_max': (
+                    'Maximum salary must be greater than '
+                    'or equal to minimum salary.'
+                )
+            })
+
+        return attrs

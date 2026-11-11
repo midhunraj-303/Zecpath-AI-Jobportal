@@ -17,13 +17,16 @@ from apps.accounts.permissions import (
 )
 from apps.employers.models import Employer
 
-from .models import Job
+from .models import Job, JobStatus
 from .serializers import JobSerializer
 
 from utils.pagination import StandardResultsSetPagination
 from django.utils.dateparse import parse_date
 
 from django.db.models import Q  # Combine multiple conditions using OR
+
+from django.utils import timezone
+
 
 class JobListCreateAPIView(APIView):
     """
@@ -52,7 +55,8 @@ class JobListCreateAPIView(APIView):
             )
 
         jobs = Job.objects.filter(
-            employer=employer
+            employer=employer,
+            is_deleted=False
         ).order_by('-created_at')
 
         paginator = StandardResultsSetPagination()
@@ -257,12 +261,149 @@ class JobDetailAPIView(APIView):
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        job.delete()
+        if job.is_deleted:
+            return Response(
+                {"error": "Job has already been deleted."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        job.is_deleted = True
+        job.deleted_at = timezone.now()
+
+        job.save(
+            update_fields=['is_deleted', 'deleted_at', 'updated_at']
+        )
 
         return Response(
             {"message": "Job deleted successfully."},
             status=status.HTTP_200_OK
         )
+
+
+
+class JobStatusUpdateAPIView(APIView):
+    """
+    Allow employers and administrators to update job statuses.
+    """
+
+    permission_classes = [IsAdmin | IsEmployer]
+
+    # Define permitted status transitions.
+    ALLOWED_TRANSITIONS = {
+        JobStatus.DRAFT: [
+            JobStatus.PUBLISHED
+        ],
+        JobStatus.PUBLISHED: [
+            JobStatus.PAUSED,
+            JobStatus.CLOSED
+        ],
+        JobStatus.PAUSED: [
+            JobStatus.PUBLISHED,
+            JobStatus.CLOSED
+        ],
+        JobStatus.CLOSED: [],
+        JobStatus.EXPIRED: [],
+    }
+
+    def patch(self, request, job_id):
+        """
+        Update a job's lifecycle status.
+
+        Employers can update only their own jobs.
+        Administrators can update any job.
+
+        Args:
+            request: The incoming HTTP request.
+            job_id: The primary key of the job.
+
+        Returns:
+            Response: Updated job data or an error response.
+        """
+
+        try:
+            if request.user.role == 'ADMIN':
+                job = Job.objects.get(
+                    job_id=job_id,
+                    is_deleted=False
+                )
+            else:
+                employer = Employer.active_objects.get(
+                    user=request.user
+                )
+
+                job = Job.objects.get(
+                    job_id=job_id,
+                    employer=employer,
+                    is_deleted=False
+                )
+
+        except (Job.DoesNotExist, Employer.DoesNotExist):
+            return Response(
+                {"error": "Job not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        new_status = request.data.get('status')
+
+        if new_status not in JobStatus.values:
+            return Response(
+                {"error": "Invalid job status."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        current_status = job.status
+
+        if new_status == current_status:
+            return Response(
+                {"error": "Job already has this status."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        allowed_statuses = self.ALLOWED_TRANSITIONS.get(
+            current_status,
+            []
+        )
+
+        if new_status not in allowed_statuses:
+            return Response(
+                {
+                    "error": (
+                        f"Cannot change job status from "
+                        f"{current_status} to {new_status}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        job.status = new_status
+
+        job.is_active = (
+            new_status == JobStatus.PUBLISHED
+        )
+
+        if (
+            new_status == JobStatus.PUBLISHED
+            and job.published_at is None
+        ):
+            job.published_at = timezone.now()
+
+        job.save(
+            update_fields=[
+                'status',
+                'is_active',
+                'published_at',
+                'updated_at'
+            ]
+        )
+
+        return Response(
+            {
+                "message": "Job status updated successfully.",
+                "job": JobSerializer(job).data
+            },
+            status=status.HTTP_200_OK
+        )
+
 
 
 class AdminJobListAPIView(APIView):
@@ -325,13 +466,14 @@ class AvailableJobListAPIView(APIView):
             Response: Paginated list of active jobs.
         """
 
-        jobs = Job.objects.filter(  #ensures inactive jobs are never publicly displayed.
-            is_active=True
-        ).select_related(           #efficiently retrieves employer information.
+        jobs = Job.objects.filter(
+            status='PUBLISHED',
+            is_deleted=False
+        ).select_related(
             'employer'
-        ).order_by('-created_at')   #displays newest jobs first.
+        ).order_by('-created_at')
 
-        
+
         # filter using Job role
         role = request.query_params.get('role')
 
@@ -355,26 +497,22 @@ class AvailableJobListAPIView(APIView):
                 created_at__date=parsed_date
             )
 
-        # Filter jobs by status
+        # Filter jobs by publication status.
         job_status = request.query_params.get('status')
 
         if job_status:
             job_status = job_status.upper()
 
-            if job_status == 'ACTIVE':
-                jobs = jobs.filter(is_active=True)
-
-            elif job_status == 'INACTIVE':
-                jobs = jobs.filter(is_active=False)
-
-            else:
+            if job_status not in ['ACTIVE', 'PUBLISHED']:
                 return Response(
                     {
-                        "error": "Invalid status. Use ACTIVE or INACTIVE."
+                        'error': (
+                            'Invalid status. Public listings support '
+                            'only ACTIVE or PUBLISHED.'
+                        )
                     },
                     status=status.HTTP_400_BAD_REQUEST
                 )
-
 
         # Search jobs by keyword
         search_keyword = request.query_params.get('search')
@@ -427,7 +565,8 @@ class AvailableJobDetailAPIView(APIView):
                 'employer'
             ).get(
                 job_id=job_id,
-                is_active=True
+                status='PUBLISHED',
+                is_deleted=False
             )
         except Job.DoesNotExist:
             return Response(
@@ -439,5 +578,56 @@ class AvailableJobDetailAPIView(APIView):
 
         return Response(
             serializer.data,
+            status=status.HTTP_200_OK
+        )
+
+
+
+class AdminJobRestoreAPIView(APIView):
+    """
+    Allow administrators to restore soft-deleted jobs.
+    """
+
+    permission_classes = [IsAdmin]
+
+    def post(self, request, job_id):
+        """
+        Restore a previously soft-deleted job.
+
+        Args:
+            request: The incoming HTTP request.
+            job_id: The primary key of the job.
+
+        Returns:
+            Response: Restoration confirmation or an error.
+        """
+
+        try:
+            job = Job.objects.get(
+                job_id=job_id,
+                is_deleted=True
+            )
+        except Job.DoesNotExist:
+            return Response(
+                {"error": "Deleted job not found."},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        job.is_deleted = False
+        job.deleted_at = None
+
+        job.save(
+            update_fields=[
+                'is_deleted',
+                'deleted_at',
+                'updated_at'
+            ]
+        )
+
+        return Response(
+            {
+                "message": "Job restored successfully.",
+                "job": JobSerializer(job).data
+            },
             status=status.HTTP_200_OK
         )
