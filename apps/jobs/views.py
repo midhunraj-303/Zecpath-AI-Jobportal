@@ -513,6 +513,77 @@ class AvailableJobListAPIView(PublicJobQueryMixin,APIView):
                 created_at__date=parsed_date
             )
 
+        # Filter jobs by experience range.
+        min_experience = request.query_params.get(
+            'min_experience'
+        )
+
+        max_experience = request.query_params.get(
+            'max_experience'
+        )
+
+        if min_experience is not None:
+            try:
+                min_experience = int(min_experience)
+
+                if min_experience < 0:
+                    raise ValueError
+
+            except (ValueError, TypeError):
+                return Response(
+                    {
+                        'error': (
+                            'min_experience must be a '
+                            'non-negative integer.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if max_experience is not None:
+            try:
+                max_experience = int(max_experience)
+
+                if max_experience < 0:
+                    raise ValueError
+
+            except (ValueError, TypeError):
+                return Response(
+                    {
+                        'error': (
+                            'max_experience must be a '
+                            'non-negative integer.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if (
+            min_experience is not None
+            and max_experience is not None
+            and min_experience > max_experience
+        ):
+            return Response(
+                {
+                    'error': (
+                        'min_experience cannot be greater '
+                        'than max_experience.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if min_experience is not None:
+            jobs = jobs.filter(
+                Q(max_experience__gte=min_experience) |
+                Q(max_experience__isnull=True)
+            )
+
+        if max_experience is not None:
+            jobs = jobs.filter(
+                min_experience__lte=max_experience
+            )
+
         # Filter jobs by publication status.
         job_status = request.query_params.get('status')
 
