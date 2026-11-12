@@ -473,6 +473,8 @@ class PublicJobQueryMixin:
             is_deleted=False
         ).select_related(
             'employer'
+        ).prefetch_related(
+            'skills'
         )
 
 
