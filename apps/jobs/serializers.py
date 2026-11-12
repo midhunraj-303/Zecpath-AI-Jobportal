@@ -5,7 +5,7 @@ Serializers for job-related API operations.
 
 from rest_framework import serializers
 
-from .models import Job
+from .models import Job,Skill
 
 
 class JobSerializer(serializers.ModelSerializer):
@@ -18,6 +18,16 @@ class JobSerializer(serializers.ModelSerializer):
     employer_id = serializers.IntegerField(
         source='employer.employer_id',
         read_only=True
+    )
+
+    # Connect approved skills to job creation
+    skills = serializers.PrimaryKeyRelatedField(
+        queryset=Skill.objects.filter(
+            approval_status=Skill.ApprovalStatus.APPROVED,
+            is_active=True
+        ),
+        many=True,
+        required=False
     )
 
     class Meta:
@@ -118,3 +128,64 @@ class JobSerializer(serializers.ModelSerializer):
             })
 
         return attrs
+
+
+
+
+# Employers can submit only skill_name.
+# Employers cannot choose their own approval status.
+# Duplicate names are rejected, even with different letter casing.
+class SkillSerializer(serializers.ModelSerializer):
+    """
+    Serialize skills for listing and employer skill suggestions.
+    """
+
+    class Meta:
+        """Define the fields exposed through the skill API."""
+
+        model = Skill
+
+        fields = [
+            'skill_id',
+            'skill_name',
+            'approval_status',
+            'created_at',
+        ]
+
+        read_only_fields = [
+            'skill_id',
+            'approval_status',
+            'created_at',
+        ]
+
+    def validate_skill_name(self, value):
+        """
+        Validate and normalize a skill name.
+
+        Prevent duplicate skill names regardless of letter case.
+        """
+
+        value = ' '.join(value.split())
+
+        if not value:
+            raise serializers.ValidationError(
+                'Skill name cannot be empty.'
+            )
+
+        normalized_name = value.casefold()
+
+        existing_skill = Skill.objects.filter(
+            normalized_name=normalized_name
+        )
+
+        if self.instance:
+            existing_skill = existing_skill.exclude(
+                skill_id=self.instance.skill_id
+            )
+
+        if existing_skill.exists():
+            raise serializers.ValidationError(
+                'This skill already exists.'
+            )
+
+        return value

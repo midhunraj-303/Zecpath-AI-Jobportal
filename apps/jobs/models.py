@@ -7,6 +7,7 @@ from django.db import models
 from django.db.models import F, Q
 
 from apps.employers.models import Employer
+from django.conf import settings 
 
 
 def migrate_existing_job_data(apps, schema_editor):
@@ -73,16 +74,63 @@ class JobStatus(models.TextChoices):
     EXPIRED = 'EXPIRED', 'Expired'
 
 
+
 class Skill(models.Model):
-    """Represent a reusable skill that can be associated with jobs."""
+    """Represent a reusable skill in the job portal."""
+
+    class ApprovalStatus(models.TextChoices):
+        PENDING = 'PENDING', 'Pending'
+        APPROVED = 'APPROVED', 'Approved'
+        REJECTED = 'REJECTED', 'Rejected'
 
     skill_id = models.BigAutoField(primary_key=True)
-    skill_name = models.CharField(max_length=100, unique=True)
+
+    skill_name = models.CharField(
+        max_length=100,
+        unique=True
+    )
+
+    # Prevents case-insensitive duplicates
+    normalized_name = models.CharField(
+        max_length=100,
+        unique=True,
+        editable=False
+    )
+
+    # Tracks pending, approved and rejected skills
+    approval_status = models.CharField(
+        max_length=20,
+        choices=ApprovalStatus.choices,
+        default=ApprovalStatus.PENDING
+    )
+
+    # Allows administrators to deactivate skills
+    is_active = models.BooleanField(default=True)
+
+    # Identifies the employer who suggested a skill
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='created_skills'
+    )
+
     created_at = models.DateTimeField(auto_now_add=True)
+
+    def save(self, *args, **kwargs):
+        """Normalize the skill name before saving."""
+
+        self.skill_name = ' '.join(self.skill_name.split())
+        self.normalized_name = self.skill_name.casefold()
+
+        super().save(*args, **kwargs)
 
     def __str__(self):
         """Return the skill name."""
+
         return self.skill_name
+
 
 
 class Job(models.Model):
@@ -184,6 +232,16 @@ class Job(models.Model):
         null=True
     )
 
+    is_featured = models.BooleanField(      # is_featured: Whether the job is promoted as a featured job.
+        default=False,
+        db_index=True
+    )
+
+    featured_until = models.DateField(      # featured_until: The last date the job should appear as featured.
+        blank=True,
+        null=True                           # featured_until=None: No scheduled expiry date.
+    )
+
     # Retained temporarily for backward compatibility.
     is_active = models.BooleanField(default=True)
 
@@ -196,8 +254,9 @@ class Job(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
+    
     class Meta:
-        """Define database-level validation rules."""
+        """Define database constraints and query indexes."""
 
         constraints = [
             models.CheckConstraint(
@@ -214,6 +273,29 @@ class Job(models.Model):
                     | Q(salary_min__lte=F('salary_max'))
                 ),
                 name='job_salary_range_valid'
+            ),
+        ]
+
+        indexes = [
+            models.Index(
+                fields=['status', 'is_deleted', '-published_at'],
+                name='job_public_listing_idx'
+            ),
+            models.Index(
+                fields=['status', 'is_deleted', '-created_at'],
+                name='job_latest_listing_idx'
+            ),
+            models.Index(
+                fields=['location'],
+                name='job_location_idx'
+            ),
+            models.Index(
+                fields=['employment_type', 'work_mode'],
+                name='job_type_mode_idx'
+            ),
+            models.Index(
+                fields=['is_featured', 'featured_until'],
+                name='job_featured_idx'
             ),
         ]
 

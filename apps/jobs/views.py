@@ -17,8 +17,8 @@ from apps.accounts.permissions import (
 )
 from apps.employers.models import Employer
 
-from .models import Job, JobStatus
-from .serializers import JobSerializer
+from .models import Job, JobStatus, Skill
+from .serializers import JobSerializer,SkillSerializer
 
 from utils.pagination import StandardResultsSetPagination
 from django.utils.dateparse import parse_date
@@ -447,7 +447,28 @@ class AdminJobListAPIView(APIView):
         )
 
 
-class AvailableJobListAPIView(APIView):
+# Avoids repeating the same database filtering logic.
+# Ensures deleted and unpublished jobs never appear publicly.
+# Makes future discovery endpoints easier to maintain.
+class PublicJobQueryMixin:
+    """
+    Provide a reusable queryset for publicly visible jobs.
+    """
+
+    def get_public_jobs(self):
+        """
+        Return published jobs that have not been deleted.
+        """
+
+        return Job.objects.filter(
+            status=JobStatus.PUBLISHED,
+            is_deleted=False
+        ).select_related(
+            'employer'
+        )
+
+
+class AvailableJobListAPIView(PublicJobQueryMixin,APIView):
     """
     Allow public users to browse active job postings.
     """
@@ -466,12 +487,7 @@ class AvailableJobListAPIView(APIView):
             Response: Paginated list of active jobs.
         """
 
-        jobs = Job.objects.filter(
-            status='PUBLISHED',
-            is_deleted=False
-        ).select_related(
-            'employer'
-        ).order_by('-created_at')
+        jobs = self.get_public_jobs().order_by('-created_at')
 
 
         # filter using Job role
@@ -514,6 +530,21 @@ class AvailableJobListAPIView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
 
+        # Filter jobs by required skills.
+        skill_parameter = request.query_params.get('skill')
+
+        if skill_parameter:
+            requested_skills = [
+                skill.strip()           # Remove unnecessary spaces
+                for skill in skill_parameter.split(',')     #Supports multiple skills
+                if skill.strip()
+            ]
+
+            if requested_skills:
+                jobs = jobs.filter(
+                    skills__skill_name__in=requested_skills     #filters through the ManyToMany relationship.
+                ).distinct()                    #prevents duplicate jobs when multiple requested skills match.
+
         # Search jobs by keyword
         search_keyword = request.query_params.get('search')
 
@@ -539,6 +570,7 @@ class AvailableJobListAPIView(APIView):
         return paginator.get_paginated_response(
             serializer.data
         )
+
 
 
 class AvailableJobDetailAPIView(APIView):
@@ -582,6 +614,67 @@ class AvailableJobDetailAPIView(APIView):
         )
 
 
+
+class FeaturedJobListAPIView(PublicJobQueryMixin, APIView):
+    """
+    Return currently featured jobs for public discovery.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """
+        Retrieve featured jobs that have not expired.
+        """
+
+        today = timezone.localdate()
+
+        jobs = self.get_public_jobs().filter(
+            is_featured=True                        #only jobs marked as featured
+        ).filter(
+            Q(featured_until__isnull=True) |        #no expiry date has been set
+            Q(featured_until__gte=today)            #the expiry date has not passed
+        ).order_by('-created_at')
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(jobs, request)
+
+        serializer = JobSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            serializer.data
+        )
+
+
+
+# The newest job postings appear first.
+# It uses the existing job_latest_listing_idx database index.
+class LatestJobListAPIView(PublicJobQueryMixin, APIView):
+    """
+    Return the latest published jobs for public discovery.
+    """
+
+    permission_classes = [AllowAny]
+
+    def get(self, request):
+        """
+        Retrieve the latest published jobs with pagination.
+        """
+
+        jobs = self.get_public_jobs().order_by(
+            '-created_at'
+        )
+
+        paginator = StandardResultsSetPagination()
+        page = paginator.paginate_queryset(jobs, request)
+
+        serializer = JobSerializer(page, many=True)
+
+        return paginator.get_paginated_response(
+            serializer.data
+        )
+
+    
 
 class AdminJobRestoreAPIView(APIView):
     """
@@ -631,3 +724,159 @@ class AdminJobRestoreAPIView(APIView):
             },
             status=status.HTTP_200_OK
         )
+
+
+
+
+class SkillListCreateAPIView(APIView):
+    """
+    List approved skills and allow employers to suggest new skills.
+    """
+
+    def get_permissions(self):
+        """
+        Apply permissions according to the HTTP method.
+        """
+
+        if self.request.method == 'GET':
+            return [AllowAny()]
+
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsEmployer()]
+
+        return [IsAuthenticated(), IsAdmin()]
+
+    def get(self, request):
+        """
+        List approved and active skills.
+
+        Supports searching skills by name using
+        the 'search' query parameter.
+        """
+        skills = Skill.objects.filter(
+            approval_status=Skill.ApprovalStatus.APPROVED,
+            is_active=True
+        )
+
+        search_query = request.query_params.get('search')
+
+        if search_query:
+            skills = skills.filter(
+                skill_name__icontains=search_query.strip()
+            )
+
+        skills = skills.order_by('skill_name')
+
+        serializer = SkillSerializer(skills, many=True)
+
+        return Response(serializer.data)
+
+    def post(self, request):
+        """
+        Allow an employer to suggest a new skill.
+        """
+
+        serializer = SkillSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        serializer.save(
+            created_by=request.user,
+            approval_status=Skill.ApprovalStatus.PENDING
+        )
+
+        return Response(
+            {
+                'message': 'Skill submitted for admin approval.',
+                'skill': serializer.data
+            },
+            status=status.HTTP_201_CREATED
+        )
+
+
+
+class SkillApprovalAPIView(APIView):
+    """
+    Allow administrators to approve, reject or deactivate skills.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def patch(self, request, skill_id):
+        """
+        Update a skill's approval status or active state.
+        """
+
+        try:
+            skill = Skill.objects.get(skill_id=skill_id)
+        except Skill.DoesNotExist:
+            return Response(
+                {'error': 'Skill not found.'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        approval_status = request.data.get('approval_status')
+        is_active = request.data.get('is_active')
+
+        if approval_status is None and is_active is None:
+            return Response(
+                {
+                    'error': (
+                        'Provide approval_status or is_active.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if approval_status is not None:
+            valid_statuses = Skill.ApprovalStatus.values
+
+            if approval_status not in valid_statuses:
+                return Response(
+                    {'error': 'Invalid approval status.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            skill.approval_status = approval_status
+
+        if is_active is not None:
+            if not isinstance(is_active, bool):
+                return Response(
+                    {'error': 'is_active must be true or false.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            skill.is_active = is_active
+
+        skill.save()
+
+        serializer = SkillSerializer(skill)
+
+        return Response({
+            'message': 'Skill updated successfully.',
+            'skill': serializer.data
+        })
+
+
+
+class PendingSkillListAPIView(APIView):
+    """
+    Allow administrators to view skills awaiting approval.
+    """
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        """
+        Return all skills with pending approval status.
+        """
+
+        skills = Skill.objects.filter(
+            approval_status=Skill.ApprovalStatus.PENDING
+        ).order_by('-created_at')
+
+        serializer = SkillSerializer(
+            skills,
+            many=True
+        )
+
+        return Response(serializer.data)
