@@ -50,7 +50,6 @@ class JobSerializer(serializers.ModelSerializer):
             'salary_max',
             'salary_currency',
             'salary_period',
-            'salary',
             'location',
             'employment_type',
             'work_mode',

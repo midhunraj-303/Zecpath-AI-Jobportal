@@ -17,7 +17,13 @@ from apps.accounts.permissions import (
 )
 from apps.employers.models import Employer
 
-from .models import Job, JobStatus, Skill
+from .models import (
+    Job,
+    JobStatus,
+    Skill,
+    EmploymentType,
+)
+
 from .serializers import JobSerializer,SkillSerializer
 
 from utils.pagination import StandardResultsSetPagination
@@ -26,6 +32,8 @@ from django.utils.dateparse import parse_date
 from django.db.models import Q  # Combine multiple conditions using OR
 
 from django.utils import timezone
+
+from decimal import Decimal, InvalidOperation
 
 
 class JobListCreateAPIView(APIView):
@@ -583,6 +591,123 @@ class AvailableJobListAPIView(PublicJobQueryMixin,APIView):
             jobs = jobs.filter(
                 min_experience__lte=max_experience
             )
+
+
+
+        # Filter jobs by monthly salary range.
+        min_salary = request.query_params.get('min_salary')
+        max_salary = request.query_params.get('max_salary')
+
+        # Validate minimum salary.
+        if min_salary is not None:
+            try:
+                min_salary = Decimal(min_salary)
+
+                if not min_salary.is_finite() or min_salary < 0:
+                    raise ValueError
+
+            except (InvalidOperation, ValueError, TypeError):
+                return Response(
+                    {
+                        'error': (
+                            'min_salary must be a valid '
+                            'non-negative decimal amount.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Validate maximum salary.
+        if max_salary is not None:
+            try:
+                max_salary = Decimal(max_salary)
+
+                if not max_salary.is_finite() or max_salary < 0:
+                    raise ValueError
+
+            except (InvalidOperation, ValueError, TypeError):
+                return Response(
+                    {
+                        'error': (
+                            'max_salary must be a valid '
+                            'non-negative decimal amount.'
+                        )
+                    },
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        # Validate salary range.
+        if (
+            min_salary is not None
+            and max_salary is not None
+            and min_salary > max_salary
+        ):
+            return Response(
+                {
+                    'error': (
+                        'min_salary cannot be greater '
+                        'than max_salary.'
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        # Apply salary range overlap filtering.
+        if min_salary is not None or max_salary is not None:
+
+            # Only compare standardized INR/month salaries.
+            jobs = jobs.filter(
+                salary_currency='INR',
+                salary_period='MONTH'
+            )
+
+            if min_salary is not None:
+                jobs = jobs.filter(
+                    salary_max__gte=min_salary
+                )
+
+            if max_salary is not None:
+                jobs = jobs.filter(
+                    salary_min__lte=max_salary
+                )
+
+
+        # Filter jobs by location.
+        location = request.query_params.get('location')
+
+        if location:
+            location = location.strip()
+
+            if location:
+                jobs = jobs.filter(
+                    location__icontains=location
+                )
+
+
+        # Filter jobs by employment type.
+        employment_type = request.query_params.get('employment_type')
+
+        if employment_type:
+            employment_type = employment_type.strip().upper()
+
+            if employment_type:
+                valid_types = EmploymentType.values
+
+                if employment_type not in valid_types:
+                    return Response(
+                        {
+                            "error": (
+                                "Invalid employment type.",
+                                f"Choose from: {', '.join(valid_types)}"
+                            )
+                        },
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+
+                jobs = jobs.filter(
+                    employment_type=employment_type
+                )
+
 
         # Filter jobs by publication status.
         job_status = request.query_params.get('status')

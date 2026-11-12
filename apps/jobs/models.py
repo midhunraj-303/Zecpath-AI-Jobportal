@@ -10,32 +10,6 @@ from apps.employers.models import Employer
 from django.conf import settings 
 
 
-def migrate_existing_job_data(apps, schema_editor):
-    """
-    Migrate existing job records to the new schema.
-
-    Preserve existing salary amounts and map the legacy active
-    flag to the new job lifecycle status.
-    """
-
-    Job = apps.get_model('jobs', 'Job')
-
-    # Copy the existing salary into both range boundaries.
-    # Leave currency and salary period unspecified.
-    Job.objects.filter(salary__isnull=False).update(
-        salary_min=models.F('salary'),
-        salary_max=models.F('salary')
-    )
-
-    # Map existing active jobs to PUBLISHED.
-    Job.objects.filter(is_active=True).update(
-        status='PUBLISHED'
-    )
-
-    # Map existing inactive jobs to PAUSED.
-    Job.objects.filter(is_active=False).update(
-        status='PAUSED'
-    )
 
 class EmploymentType(models.TextChoices):
     """Available employment arrangements."""
@@ -57,11 +31,9 @@ class WorkMode(models.TextChoices):
 
 
 class SalaryPeriod(models.TextChoices):
-    """Salary payment periods."""
+    """Standardized monthly salary payment period."""
 
-    YEAR = 'YEAR', 'Per Year'
     MONTH = 'MONTH', 'Per Month'
-    HOUR = 'HOUR', 'Per Hour'
 
 
 class JobStatus(models.TextChoices):
@@ -169,36 +141,33 @@ class Job(models.Model):
     )
 
     salary_min = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        blank=True,
-        null=True
+    max_digits=12,
+    decimal_places=2,
+    blank=True,
+    null=True
     )
+
     salary_max = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         blank=True,
         null=True
     )
+
     salary_currency = models.CharField(
         max_length=3,
-        blank=True,
-        null=True
+        default='INR',
+        editable=False
     )
+
     salary_period = models.CharField(
         max_length=10,
         choices=SalaryPeriod.choices,
-        blank=True,
-        null=True
+        default=SalaryPeriod.MONTH,
+        editable=False
     )
 
-    # Legacy field retained during the API transition.
-    salary = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        blank=True,
-        null=True
-    )
+
 
     location = models.CharField(max_length=200)
 
