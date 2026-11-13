@@ -3,8 +3,11 @@ from rest_framework import serializers
 
 from apps.candidates.serializers import ResumeUploadSerializer
 
-from .models import Application, ApplicationStatus
-
+from .models import (
+    Application, 
+    ApplicationStatus,
+    ApplicationStatusHistory
+)
 
 class ApplicationSerializer(serializers.ModelSerializer):
     """Serialize application data for API requests and responses."""
@@ -112,3 +115,36 @@ class ApplicationStatusUpdateSerializer(serializers.ModelSerializer):
 
         model = Application
         fields = ['status']
+
+
+
+
+class ApplicationStatusHistorySerializer(serializers.ModelSerializer):
+    """
+    Serialize application status history for API responses.
+
+    Exposes the previous status, new status, user responsible
+    for the change, remarks, and timestamp.
+    """
+
+    changed_by_username = serializers.CharField(
+        source='changed_by.username',
+        read_only=True,
+        default=None
+    )
+
+    class Meta:
+        """Define the fields exposed by the history API."""
+
+        model = ApplicationStatusHistory
+
+        fields = [
+            'history_id',
+            'previous_status',
+            'new_status',
+            'changed_by_username',
+            'remarks',
+            'changed_at'
+        ]
+
+        read_only_fields = fields

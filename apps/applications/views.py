@@ -11,12 +11,14 @@ from apps.accounts.permissions import (
     IsAdmin
 )
 from apps.candidates.models import Candidate
-from apps.jobs.models import Job
+from apps.jobs.models import Job, JobStatus
+from django.utils import timezone
 
-from .models import Application
+from .models import Application,ApplicationStatusHistory
 from .serializers import (
     ApplicationSerializer,
-    ApplicationStatusUpdateSerializer
+    ApplicationStatusUpdateSerializer,
+    ApplicationStatusHistorySerializer
 )
 
 from apps.employers.models import Employer
@@ -62,11 +64,38 @@ class ApplyForJobAPIView(generics.CreateAPIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+        
         job = get_object_or_404(
             Job,
-            job_id=job_id,
-            is_active=True
+            job_id=job_id
         )
+
+        today = timezone.localdate()
+
+        if (
+            job.status != JobStatus.PUBLISHED
+            or not job.is_active
+            or job.is_deleted
+        ):
+            return Response(
+                {
+                    'error': 'This job is not available for applications.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if (
+            job.application_deadline is not None
+            and job.application_deadline < today
+        ):
+            return Response(
+                {
+                    'error': 'The application deadline for this job has passed.'
+                },
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+
 
         candidate = get_object_or_404(
             Candidate.active_objects,
@@ -125,6 +154,14 @@ class ApplyForJobAPIView(generics.CreateAPIView):
                     candidate=candidate,
                     job=job
                 )
+
+                ApplicationStatusHistory.objects.create(
+                application=application,
+                previous_status=None,
+                new_status=application.status,
+                changed_by=request.user,
+                remarks="Application submitted."
+            )
 
                 if uploaded_resume is not None:
                     application.resume.save(
@@ -231,8 +268,13 @@ class ReceivedApplicationsAPIView(generics.ListAPIView):
         )
 
 
+
 class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
-    """Allow employers to update application statuses for their own jobs."""
+    """
+    Allow employers to update application statuses for their own jobs.
+
+    Record every actual status transition in ApplicationStatusHistory.
+    """
 
     serializer_class = ApplicationStatusUpdateSerializer
     permission_classes = [IsAuthenticated, IsEmployer]
@@ -260,6 +302,95 @@ class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
             .filter(job__employer=employer)
             .select_related('candidate', 'job', 'job__employer')
         )
+
+    def perform_update(self, serializer):
+        """
+        Update the application and record its status transition.
+
+        A history record is created only when the status actually changes.
+        Both operations are performed within a database transaction.
+
+        Args:
+            serializer: Validated application status serializer.
+        """
+
+        application = serializer.instance
+        previous_status = application.status
+
+        with transaction.atomic():
+            serializer.save()
+
+            new_status = application.status
+
+            if previous_status != new_status:
+                ApplicationStatusHistory.objects.create(
+                    application=application,
+                    previous_status=previous_status,
+                    new_status=new_status,
+                    changed_by=self.request.user,
+                    remarks="Application status updated."
+                )
+
+
+
+
+class ApplicationStatusHistoryAPIView(generics.ListAPIView):
+    """
+    Retrieve status history for a specific application.
+
+    Candidates can access their own application history.
+    Employers can access applications belonging to their jobs.
+    Admins can access all application histories.
+    """
+
+    serializer_class = ApplicationStatusHistorySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        """
+        Return status history if the requesting user has access.
+
+        Returns:
+            QuerySet: Ordered status history records.
+
+        Raises:
+            Http404: If the application does not exist or is not accessible.
+        """
+
+        application_id = self.kwargs['application_id']
+        user = self.request.user
+
+        application_queryset = Application.objects.filter(
+            application_id=application_id
+        )
+
+        if user.role == 'ADMIN':
+            pass
+
+        elif user.role == 'EMPLOYER':
+            application_queryset = application_queryset.filter(
+                job__employer__user=user,
+                job__employer__is_deleted=False
+            )
+
+        elif user.role == 'CANDIDATE':
+            application_queryset = application_queryset.filter(
+                candidate__user=user,
+                candidate__is_deleted=False
+            )
+
+        else:
+            return ApplicationStatusHistory.objects.none()
+
+        application = get_object_or_404(application_queryset)
+
+        return (
+            ApplicationStatusHistory.objects
+            .filter(application=application)
+            .select_related('changed_by')
+            .order_by('changed_at')
+        )
+
 
 
 class ApplicationResumeDownloadAPIView(APIView):
