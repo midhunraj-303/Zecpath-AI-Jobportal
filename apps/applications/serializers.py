@@ -102,8 +102,13 @@ class ApplicationSerializer(serializers.ModelSerializer):
         return obj.resume.name.rsplit('/', 1)[-1]
 
 
+
 class ApplicationStatusUpdateSerializer(serializers.ModelSerializer):
-    """Validate and update an application's status."""
+    """
+    Validate application status updates.
+
+    Enforce permitted status transitions before saving an application.
+    """
 
     status = serializers.ChoiceField(
         choices=ApplicationStatus.choices,
@@ -116,6 +121,62 @@ class ApplicationStatusUpdateSerializer(serializers.ModelSerializer):
         model = Application
         fields = ['status']
 
+    def validate_status(self, new_status):
+        """
+        Validate whether the requested status transition is permitted.
+
+        Args:
+            new_status: The status requested by the employer.
+
+        Returns:
+            str: The validated application status.
+
+        Raises:
+            serializers.ValidationError: If the transition is invalid.
+        """
+
+        application = self.instance
+        current_status = application.status
+
+        allowed_transitions = {
+            ApplicationStatus.APPLIED: [
+                ApplicationStatus.REVIEWING,
+                ApplicationStatus.SHORTLISTED,
+                ApplicationStatus.REJECTED,
+            ],
+            ApplicationStatus.REVIEWING: [
+                ApplicationStatus.SHORTLISTED,
+                ApplicationStatus.INTERVIEW_SCHEDULED,
+                ApplicationStatus.REJECTED,
+            ],
+            ApplicationStatus.SHORTLISTED: [
+                ApplicationStatus.INTERVIEW_SCHEDULED,
+                ApplicationStatus.REJECTED,
+            ],
+            ApplicationStatus.INTERVIEW_SCHEDULED: [
+                ApplicationStatus.SELECTED,
+                ApplicationStatus.REJECTED,
+            ],
+            ApplicationStatus.SELECTED: [],
+            ApplicationStatus.REJECTED: [],
+        }
+
+        # Allow the current status without creating a new history record.
+        if new_status == current_status:
+            return new_status
+
+        permitted_statuses = allowed_transitions.get(
+            current_status,
+            []
+        )
+
+        if new_status not in permitted_statuses:
+            raise serializers.ValidationError(
+                f"Cannot change application status from "
+                f"{current_status} to {new_status}."
+            )
+
+        return new_status
 
 
 

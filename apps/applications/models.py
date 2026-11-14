@@ -8,12 +8,15 @@ from apps.jobs.models import Job
 class ApplicationStatus(models.TextChoices):
     """Define the possible statuses of a job application."""
 
-    PENDING = 'PENDING', 'Pending'
+    APPLIED = 'APPLIED', 'Applied'
     REVIEWING = 'REVIEWING', 'Reviewing'
     SHORTLISTED = 'SHORTLISTED', 'Shortlisted'
+    INTERVIEW_SCHEDULED = (
+        'INTERVIEW_SCHEDULED',
+        'Interview Scheduled'
+    )
     REJECTED = 'REJECTED', 'Rejected'
-    ACCEPTED = 'ACCEPTED', 'Accepted'
-
+    SELECTED = 'SELECTED', 'Selected'
 
 class Application(models.Model):
     """Store a candidate's application for a particular job."""
@@ -43,7 +46,7 @@ class Application(models.Model):
     status = models.CharField(
         max_length=20,
         choices=ApplicationStatus.choices,
-        default=ApplicationStatus.PENDING
+        default=ApplicationStatus.APPLIED
     )
 
     applied_at = models.DateTimeField(auto_now_add=True)
