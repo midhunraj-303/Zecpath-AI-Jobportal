@@ -30,7 +30,7 @@ from django.db import transaction
 from django.http import FileResponse
 from rest_framework.views import APIView
 from utils.pagination import StandardResultsSetPagination
-
+from django.db.models import Q
 
 class ApplyForJobAPIView(generics.CreateAPIView):
     """Allow authenticated candidates to apply for active jobs."""
@@ -234,7 +234,11 @@ class MyApplicationsAPIView(generics.ListAPIView):
         return (
             Application.objects
             .filter(candidate=candidate)
-            .select_related('candidate', 'job')
+            .select_related(
+                'candidate', 
+                'job',
+                'job__employer'
+                )
             .order_by('-applied_at')
         )
 
@@ -247,25 +251,44 @@ class ReceivedApplicationsAPIView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsEmployer]
     pagination_class = StandardResultsSetPagination
 
+
     def get_queryset(self):
         """
         Return applications received for the current active employer.
 
-        Returns:
-            QuerySet: Applications for jobs owned by this employer.
+        Supports filtering applications by ATS status using the
+        optional 'status' query parameter.
         """
-
         employer = get_object_or_404(
             Employer.active_objects,
             user=self.request.user
         )
 
-        return (
+        queryset = (
             Application.objects
             .filter(job__employer=employer)
             .select_related('candidate', 'job')
             .order_by('-applied_at')
         )
+
+        # Filter applications by ATS status when provided.
+        status = self.request.query_params.get('status')
+
+        if status:
+            queryset = queryset.filter(status=status.upper())
+
+        # Search candidate details.
+        search = self.request.query_params.get('search')
+
+        if search:
+            queryset = queryset.filter(
+                Q(candidate__full_name__icontains=search)
+                | Q(candidate__user__email__icontains=search)
+                | Q(candidate__user__username__icontains=search)
+            )
+
+        return queryset
+
 
 
 

@@ -14,6 +14,8 @@ from apps.accounts.permissions import IsEmployer
 from .models import Employer
 from .serializers import EmployerSerializer
 
+from django.db.models import Count
+from apps.applications.models import Application,ApplicationStatus
 
 class EmployerProfileAPIView(APIView):
     """
@@ -168,6 +170,74 @@ class EmployerProfileAPIView(APIView):
         return Response(
             {
                 'message': 'Employer profile deleted successfully.'
+            },
+            status=status.HTTP_200_OK
+        )
+
+
+
+class EmployerApplicationStatsAPIView(APIView):
+    """
+    Provide application statistics for the authenticated employer.
+    """
+
+    permission_classes = [IsAuthenticated, IsEmployer]
+
+    def get(self, request):
+        """
+        Retrieve application counts grouped by ATS status.
+
+        Returns:
+            Response: Total applications and status-wise counts.
+        """
+
+        employer = get_object_or_404(
+            Employer.active_objects,
+            user=request.user
+        )
+
+        # Retrieve applications for this employer's jobs only.
+        applications = Application.objects.filter(
+            job__employer=employer
+        )
+
+        # Count applications grouped by status.
+        status_counts = applications.values(
+            'status'
+        ).annotate(
+            total=Count('application_id')
+        )
+
+        # Initialize all statuses with zero.
+        counts = {
+            application_status: 0
+            for application_status, _ in ApplicationStatus.choices
+        }
+
+        # Update counts from the database.
+        for item in status_counts:
+            counts[item['status']] = item['total']
+
+
+       #Shortlist ration 
+        total_applications = applications.count()
+
+        shortlisted_count = counts['SHORTLISTED']
+        rejected_count = counts['REJECTED']
+        selection_count = counts['SELECTED']
+
+        shortlist_ratio = (
+            round((shortlisted_count / total_applications) * 100, 2)
+            if total_applications > 0
+            else 0.0
+        )
+
+        return Response(
+            {
+                'total_applications': applications.count(),
+                'shortlist_ratio': shortlist_ratio,
+                'status_counts': counts,
+                
             },
             status=status.HTTP_200_OK
         )

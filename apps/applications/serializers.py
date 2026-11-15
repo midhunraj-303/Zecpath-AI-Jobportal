@@ -17,6 +17,11 @@ class ApplicationSerializer(serializers.ModelSerializer):
         read_only=True
     )
 
+    candidate_name = serializers.CharField(
+        source='candidate.full_name',
+        read_only=True
+    )
+
     job_id = serializers.IntegerField(
         source='job.job_id',
         read_only=True
@@ -33,6 +38,11 @@ class ApplicationSerializer(serializers.ModelSerializer):
         allow_null=True
     )
 
+    company_name = serializers.CharField(
+        source='job.employer.company_name',
+        read_only=True
+    )
+
     resume_name = serializers.SerializerMethodField()
 
     class Meta:
@@ -43,8 +53,10 @@ class ApplicationSerializer(serializers.ModelSerializer):
         fields = [
             'application_id',
             'candidate_id',
+            'candidate_name',
             'job_id',
             'job_title',
+            'company_name',
             'resume',
             'resume_name',
             'cover_letter',
