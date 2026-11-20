@@ -8,17 +8,24 @@ from rest_framework.response import Response
 from apps.accounts.permissions import (
     IsCandidate,
     IsEmployer,
-    IsAdmin
+    IsAdmin,
+    IsActiveVerifiedUser
 )
 from apps.candidates.models import Candidate
 from apps.jobs.models import Job, JobStatus
 from django.utils import timezone
 
-from .models import Application,ApplicationStatusHistory
+from .models import (
+    Application,
+    ApplicationStatusHistory,
+    ApplicationStatus,
+    ApplicationNotification
+)
 from .serializers import (
     ApplicationSerializer,
     ApplicationStatusUpdateSerializer,
-    ApplicationStatusHistorySerializer
+    ApplicationStatusHistorySerializer,
+    ApplicationTrackingSerializer
 )
 
 from apps.employers.models import Employer
@@ -328,10 +335,10 @@ class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
 
     def perform_update(self, serializer):
         """
-        Update the application and record its status transition.
+        Update application status and record the transition.
 
-        A history record is created only when the status actually changes.
-        Both operations are performed within a database transaction.
+        Create a status history record and candidate notification
+        only when the application status actually changes.
 
         Args:
             serializer: Validated application status serializer.
@@ -346,6 +353,8 @@ class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
             new_status = application.status
 
             if previous_status != new_status:
+
+                # Record application status history.
                 ApplicationStatusHistory.objects.create(
                     application=application,
                     previous_status=previous_status,
@@ -354,6 +363,19 @@ class UpdateApplicationStatusAPIView(generics.UpdateAPIView):
                     remarks="Application status updated."
                 )
 
+                # Generate candidate notification.
+                status_display = ApplicationStatus(new_status).label
+
+                ApplicationNotification.objects.create(
+                    candidate=application.candidate,
+                    application=application,
+                    title=f"Application {status_display}",
+                    message=(
+                        f"Your application for "
+                        f"{application.job.job_title} "
+                        f"has been updated to {status_display}."
+                    )
+                )
 
 
 
@@ -414,7 +436,61 @@ class ApplicationStatusHistoryAPIView(generics.ListAPIView):
             .order_by('changed_at')
         )
 
+class ApplicationTrackingAPIView(APIView):
+    """
+    Retrieve an application summary and its complete status timeline.
 
+    Candidates can access their own applications.
+    Employers can access applications received for their jobs.
+    Admins can access all applications.
+    """
+
+    permission_classes = [IsActiveVerifiedUser]
+
+    def get(self, request, application_id):
+        """Return application details and status history."""
+
+        user = request.user
+
+        application_queryset = Application.objects.select_related(
+            'candidate',
+            'job',
+            'job__employer'
+        ).prefetch_related(
+            'status_history__changed_by'
+        ).filter(
+            application_id=application_id
+        )
+
+        if user.role == 'ADMIN':
+            pass
+
+        elif user.role == 'EMPLOYER':
+            application_queryset = application_queryset.filter(
+                job__employer__user=user,
+                job__employer__is_deleted=False
+            )
+
+        elif user.role == 'CANDIDATE':
+            application_queryset = application_queryset.filter(
+                candidate__user=user,
+                candidate__is_deleted=False
+            )
+
+        else:
+            return Response(
+                {'detail': 'You do not have permission to access this application.'},
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        application = get_object_or_404(application_queryset)
+
+        serializer = ApplicationTrackingSerializer(application)
+
+        return Response(
+            serializer.data,
+            status=status.HTTP_200_OK
+        )
 
 class ApplicationResumeDownloadAPIView(APIView):
     """Allow employers and admins to download application resumes."""

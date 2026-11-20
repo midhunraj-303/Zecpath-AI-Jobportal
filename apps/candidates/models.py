@@ -2,7 +2,7 @@
 from django.conf import settings
 from django.db import models
 from django.utils import timezone
-
+from apps.jobs.models import  Job
 
 class ActiveProfileManager(models.Manager):
     """Return only profiles that have not been soft-deleted."""
@@ -41,7 +41,7 @@ class Candidate(models.Model):
     skills = models.TextField(blank=True)
     location = models.CharField(max_length=200, blank=True)
 
-    expected_salary = models.DecimalField(
+    expected_salary_annual = models.DecimalField(
         max_digits=12,
         decimal_places=2,
         null=True,
@@ -137,6 +137,50 @@ class Experience(models.Model):
         return f'{self.job_title} - {self.company_name}'
 
 
+class SavedJob(models.Model):
+    """
+    Store jobs bookmarked by candidates for future reference.
+    """
 
+    saved_job_id = models.BigAutoField(primary_key=True)
 
+    candidate = models.ForeignKey(
+        Candidate,
+        on_delete=models.CASCADE,
+        related_name='saved_jobs'
+    )
 
+    job = models.ForeignKey(
+        Job,
+        on_delete=models.CASCADE,
+        related_name='saved_by_candidates'
+    )
+
+    saved_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Define database constraints and default ordering."""
+
+        constraints = [
+            models.UniqueConstraint(
+                fields=['candidate', 'job'],
+                name='unique_candidate_saved_job'
+            )
+        ]
+
+        ordering = ['-saved_at']
+
+        indexes = [
+            models.Index(
+                fields=['candidate', '-saved_at'],
+                name='candidate_saved_jobs_idx'
+            )
+        ]
+
+    def __str__(self):
+        """Return a readable representation of the saved job."""
+
+        return (
+            f'{self.candidate.full_name} - '
+            f'{self.job.job_title}'
+        )

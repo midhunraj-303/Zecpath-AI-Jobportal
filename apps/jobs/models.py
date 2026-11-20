@@ -31,9 +31,9 @@ class WorkMode(models.TextChoices):
 
 
 class SalaryPeriod(models.TextChoices):
-    """Standardized monthly salary payment period."""
+    """Standardized annual salary payment period."""
 
-    MONTH = 'MONTH', 'Per Month'
+    YEAR = 'YEAR', 'Per Year'
 
 
 class JobStatus(models.TextChoices):
@@ -163,7 +163,7 @@ class Job(models.Model):
     salary_period = models.CharField(
         max_length=10,
         choices=SalaryPeriod.choices,
-        default=SalaryPeriod.MONTH,
+        default=SalaryPeriod.YEAR,
         editable=False
     )
 

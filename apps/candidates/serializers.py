@@ -1,10 +1,15 @@
 
 from rest_framework import serializers
 
-from .models import Candidate, Education, Experience
+from .models import (
+    Candidate, 
+    Education, 
+    Experience,
+    SavedJob
+)
 from pathlib import Path
 from zipfile import BadZipFile, ZipFile
-
+from apps.jobs.models import Job
 
 class EducationSerializer(serializers.ModelSerializer):
     """Serialize and validate a candidate's education record."""
@@ -135,7 +140,7 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
             'resume_name',
             'skills',
             'location',
-            'expected_salary',
+            'expected_salary_annual',
             'educations',
             'experiences',
             'created_at',
@@ -186,7 +191,7 @@ class CandidateProfileSerializer(serializers.ModelSerializer):
 
         return value
 
-    def validate_expected_salary(self, value):
+    def validate_expected_salary_annual(self, value):
         """Ensure the expected salary is positive.
 
         Args:
@@ -355,3 +360,109 @@ class ResumeUploadSerializer(serializers.Serializer):
             finally:
                 uploaded_file.seek(0)
         return uploaded_file
+
+
+
+class SavedJobSerializer(serializers.ModelSerializer):
+    """
+    Serialize saved jobs with relevant job and employer details.
+    """
+
+    job_title = serializers.CharField(
+        source='job.job_title',
+        read_only=True
+    )
+
+    company_name = serializers.CharField(
+        source='job.employer.company_name',
+        read_only=True
+    )
+
+    location = serializers.CharField(
+        source='job.location',
+        read_only=True
+    )
+
+    employment_type = serializers.CharField(
+        source='job.employment_type',
+        read_only=True
+    )
+
+    work_mode = serializers.CharField(
+        source='job.work_mode',
+        read_only=True
+    )
+
+    class Meta:
+        """Define the fields exposed by the saved jobs API."""
+
+        model = SavedJob
+
+        fields = [
+            'saved_job_id',
+            'job',
+            'job_title',
+            'company_name',
+            'location',
+            'employment_type',
+            'work_mode',
+            'saved_at',
+        ]
+
+        read_only_fields = [
+            'saved_job_id',
+            'job_title',
+            'company_name',
+            'location',
+            'employment_type',
+            'work_mode',
+            'saved_at',
+        ]
+
+
+
+
+class RecommendedJobSerializer(serializers.ModelSerializer):
+    """
+    Serialize recommended jobs with annual salary and skill-match details.
+    """
+
+    company_name = serializers.CharField(
+        source='employer.company_name',
+        read_only=True
+    )
+
+    required_skills = serializers.SerializerMethodField()
+
+    class Meta:
+        """Define the fields exposed by the recommended jobs API."""
+
+        model = Job
+
+        fields = [
+            'job_id',
+            'job_title',
+            'company_name',
+            'location',
+            'employment_type',
+            'work_mode',
+            'min_experience',
+            'max_experience',
+            'salary_min',
+            'salary_max',
+            'salary_currency',
+            'salary_period',
+            'required_skills',
+        ]
+
+        read_only_fields = fields
+
+    def get_required_skills(self, obj):
+        """Return approved and active skills required by the job."""
+
+        return list(
+            obj.skills.filter(
+                is_active=True,
+                approval_status='APPROVED'
+            ).values_list('skill_name', flat=True)
+        )

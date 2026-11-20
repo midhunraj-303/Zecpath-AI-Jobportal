@@ -6,7 +6,8 @@ from apps.candidates.serializers import ResumeUploadSerializer
 from .models import (
     Application, 
     ApplicationStatus,
-    ApplicationStatusHistory
+    ApplicationStatusHistory,
+    ApplicationNotification
 )
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -218,6 +219,89 @@ class ApplicationStatusHistorySerializer(serializers.ModelSerializer):
             'changed_by_username',
             'remarks',
             'changed_at'
+        ]
+
+        read_only_fields = fields
+
+
+
+class ApplicationTrackingSerializer(serializers.ModelSerializer):
+    """
+    Serialize application details along with its status timeline.
+    """
+
+    job_title = serializers.CharField(
+        source='job.job_title',
+        read_only=True
+    )
+
+    company_name = serializers.CharField(
+        source='job.employer.company_name',
+        read_only=True
+    )
+
+    current_status = serializers.CharField(
+        source='status',
+        read_only=True
+    )
+
+    history_available = serializers.SerializerMethodField()
+
+    timeline = ApplicationStatusHistorySerializer(
+        source='status_history',
+        many=True,
+        read_only=True
+    )
+
+    class Meta:
+        model = Application
+
+        fields = [
+            'application_id',
+            'job_title',
+            'company_name',
+            'current_status',
+            'applied_at',
+            'history_available',
+            'timeline'
+        ]
+
+        read_only_fields = fields
+
+    def get_history_available(self, obj):
+        """Check whether status history exists for this application."""
+
+        return obj.status_history.exists()
+
+
+class ApplicationNotificationSerializer(serializers.ModelSerializer):
+    """
+    Serialize application notifications for candidate API responses.
+    """
+
+    application_id = serializers.IntegerField(
+        source='application.application_id',
+        read_only=True
+    )
+
+    job_title = serializers.CharField(
+        source='application.job.job_title',
+        read_only=True
+    )
+
+    class Meta:
+        """Define the fields exposed by the notification API."""
+
+        model = ApplicationNotification
+
+        fields = [
+            'notification_id',
+            'application_id',
+            'job_title',
+            'title',
+            'message',
+            'is_read',
+            'created_at'
         ]
 
         read_only_fields = fields

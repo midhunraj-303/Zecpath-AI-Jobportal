@@ -596,7 +596,7 @@ class AvailableJobListAPIView(PublicJobQueryMixin,APIView):
 
 
 
-        # Filter jobs by monthly salary range.
+        # Filter jobs by annual salary range (INR per year).
         min_salary = request.query_params.get('min_salary')
         max_salary = request.query_params.get('max_salary')
 
@@ -657,10 +657,10 @@ class AvailableJobListAPIView(PublicJobQueryMixin,APIView):
         # Apply salary range overlap filtering.
         if min_salary is not None or max_salary is not None:
 
-            # Only compare standardized INR/month salaries.
+            # Only compare standardized INR/year salaries.
             jobs = jobs.filter(
                 salary_currency='INR',
-                salary_period='MONTH'
+                salary_period='YEAR'
             )
 
             if min_salary is not None:

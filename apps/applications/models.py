@@ -146,6 +146,60 @@ class ApplicationStatusHistory(models.Model):
         previous = self.previous_status or "INITIAL"
 
         return (
-            f'Application {self.application_id}: '
+            f'Application {self.application.application_id}: '
             f'{previous} -> {self.new_status}'
+        )
+
+
+class ApplicationNotification(models.Model):
+    """
+    Store application-related notifications for candidates.
+
+    Each notification informs a candidate about an update
+    to one of their job applications.
+    """
+
+    notification_id = models.BigAutoField(primary_key=True)
+
+    candidate = models.ForeignKey(
+        Candidate,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+
+    application = models.ForeignKey(
+        Application,
+        on_delete=models.CASCADE,
+        related_name='notifications'
+    )
+
+    title = models.CharField(max_length=150)
+
+    message = models.TextField()
+
+    is_read = models.BooleanField(default=False)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        """Define notification ordering and database indexes."""
+
+        ordering = ['-created_at']
+
+        indexes = [
+            models.Index(
+                fields=['candidate', 'is_read', '-created_at'],
+                name='candidate_notification_idx'
+            )
+        ]
+
+        verbose_name = 'Application Notification'
+        verbose_name_plural = 'Application Notifications'
+
+    def __str__(self):
+        """Return a readable notification description."""
+
+        return (
+            f'{self.title} - '
+            f'{self.candidate.full_name}'
         )

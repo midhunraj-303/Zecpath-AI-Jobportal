@@ -7,7 +7,8 @@ from .views import (
     ReceivedApplicationsAPIView,
     UpdateApplicationStatusAPIView,
     ApplicationResumeDownloadAPIView,
-    ApplicationStatusHistoryAPIView
+    ApplicationStatusHistoryAPIView,
+    ApplicationTrackingAPIView,
 )
 
 urlpatterns = [
@@ -45,6 +46,12 @@ urlpatterns = [
         'history/<int:application_id>/',
         ApplicationStatusHistoryAPIView.as_view(),
         name='application-status-history'
+    ),
+
+    path(
+        '<int:application_id>/tracking/',
+        ApplicationTrackingAPIView.as_view(),
+        name='application-tracking'
     ),
 
 ]

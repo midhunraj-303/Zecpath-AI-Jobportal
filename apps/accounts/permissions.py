@@ -63,3 +63,25 @@ class IsCandidate(BaseRolePermission):
     """
 
     required_role = 'CANDIDATE'
+
+
+class IsActiveVerifiedUser(BasePermission):
+    """
+    Allow access to authenticated, active, and verified users
+    with an approved ATS role.
+    """
+
+    allowed_roles = ['ADMIN', 'EMPLOYER', 'CANDIDATE']
+
+    def has_permission(self, request, view):
+        """Validate account status and permitted user role."""
+
+        user = request.user
+
+        return bool(
+            user
+            and user.is_authenticated
+            and user.is_active
+            and user.is_verified
+            and user.role in self.allowed_roles
+        )
